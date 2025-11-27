@@ -65,7 +65,7 @@ ws_codes = wb_codes.active
 city_to_icao = {}
 country_to_icao = {}
 
-row = 2
+row = 1
 while True:
     city = ws_codes.cell(row=row, column=1).value
     country = ws_codes.cell(row=row, column=2).value
@@ -81,30 +81,28 @@ while True:
 
 population_2021_dict = {}
 population_2024_dict = {}
-
-for city, pop in population_2021:
-    if city in city_to_icao:
-        icao = city_to_icao[city]
-        population_2021_dict[icao] = pop
-
-
-for city, pop in population_2024:
-    if city in city_to_icao:
-        icao = city_to_icao[city]
-        population_2024_dict[icao] = pop        
-
 gdp_2021_dict = {}
 gdp_2024_dict = {}
 
-for country, gdp in gdp_2021:
-    if country in country_to_icao:
-        icao = country_to_icao[country]
-        gdp_2021_dict[icao] = gdp
+row = 4
+while True:
+    city = ws.cell(row=row, column=1).value        # kolom A
+    pop2021 = ws.cell(row=row, column=2).value     # kolom B
+    pop2024 = ws.cell(row=row, column=3).value     # kolom C
+    gdp2021 = ws.cell(row=row, column=6).value     # kolom F
+    gdp2024 = ws.cell(row=row, column=7).value     # kolom G
 
-for country, gdp in gdp_2024:
-    if country in country_to_icao:
-        icao = country_to_icao[country]
-        gdp_2024_dict[icao] = gdp
+    if city is None:
+        break
+
+    if city in city_to_icao:
+        icao = city_to_icao[city]
+        population_2021_dict[icao] = pop2021
+        population_2024_dict[icao] = pop2024
+        gdp_2021_dict[icao] = gdp2021
+        gdp_2024_dict[icao] = gdp2024
+
+    row += 1
 
 print("Population:")
 print(population_2021_dict)
