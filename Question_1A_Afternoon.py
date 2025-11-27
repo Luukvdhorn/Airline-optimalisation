@@ -3,6 +3,9 @@ from openpyxl import *
 from time import *
 import numpy as np
 import math
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
 
 wb = load_workbook("pop.xlsx", data_only=True)
 ws = wb["General"]
@@ -185,3 +188,61 @@ print("\t" + "\t".join(airports))
 for i in range(n):
     print(airports[i], "\t" + "\t".join(f"{D[i,j]:.0f}" for j in range(n)))
 
+# Determning B1, B2, B3 and k
+f = 1.42   # fuel cost constant from assignment
+
+n = len(airports)
+rows = []
+
+for i in range(n):        
+    for j in range(n):
+        if i == j:
+            continue                    # If orgin and destionation is the same, go on
+
+        Dij = D[i, j]
+        if Dij <= 0:
+            continue                    # It there is no demand, go on
+
+        i_icao = airports[i]            #Collectiong ICAO code
+        j_icao = airports[j]
+
+        row = {
+            "D": Dij,
+            "pop": population_2021_dict[i_icao] * population_2021_dict[j_icao],
+            "gdp": gdp_2021_dict[i_icao] * gdp_2021_dict[j_icao],
+            "fd": f * dij[i, j]
+        }
+        rows.append(row)
+
+df = pd.DataFrame(rows)
+print(df)
+
+# --- LOGS ---
+df['lnD']    = np.log(df['D'])                  #logarithm to lineariz the model, dat doe je door ln van alles te nemen heeft google mij verteld
+df['ln_pop'] = np.log(df['pop'])
+df['ln_gdp'] = np.log(df['gdp'])
+df['ln_fd']  = np.log(df['fd'])
+
+# --- OLS REGRESSIE ---
+X = df[['ln_pop', 'ln_gdp', 'ln_fd']]           # Independent variables
+X = sm.add_constant(X)                          # This creates ln(k)
+y = df['lnD']                                   # Dependent variable
+
+model = sm.OLS(y, X).fit()                      # Ordinary least squares
+print(model.summary())
+
+# --- PARAMETERS ---
+a = model.params['const']            # ln(k)
+b1 = model.params['ln_pop']          # Creating b1
+b2 = model.params['ln_gdp']
+
+beta3 = model.params['ln_fd']        # = -b3 (afstand in noemer)
+b3 = -beta3                          # Because in function it is in the denominator
+
+k = np.exp(a)                       # Making k again after it is a ln()
+
+print("\n--- GRAVITY MODEL PARAMETERS ---")
+print(f"k  = {k}")
+print(f"b1 = {b1:.4f}")
+print(f"b2 = {b2:.4f}")
+print(f"b3 = {b3:.4f}")
