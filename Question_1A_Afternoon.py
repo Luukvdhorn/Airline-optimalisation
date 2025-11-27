@@ -107,17 +107,17 @@ while True:
 
     row += 1
 
-print("Population:")
-print(population_2021_dict)
+# print("Population:")
+# print(population_2021_dict)
 
-print("GDP 2021:")
-print(gdp_2021_dict)
+# print("GDP 2021:")
+# print(gdp_2021_dict)
 
-print("Population 2024:")
-print(population_2024_dict)
+# print("Population 2024:")
+# print(population_2024_dict)
 
-print("GDP 2024:")
-print(gdp_2024_dict)
+# print("GDP 2024:")
+# print(gdp_2024_dict)
 
 
 wb = load_workbook("DemandGroup40.xlsx", data_only=True)
@@ -163,10 +163,10 @@ for i in range(n):
         dij[i, j] = distance(latitudes[i], longitudes[i], latitudes[j], longitudes[j])
 
 
-print("Afstandsmatrix (km):")
-print("\t" + "\t".join(airports))
-for i, row in enumerate(dij):
-    print(airports[i], "\t" + "\t".join(f"{val:.2f}" for val in row))
+# print("Afstandsmatrix (km):")
+# print("\t" + "\t".join(airports))
+# for i, row in enumerate(dij):
+#     print(airports[i], "\t" + "\t".join(f"{val:.2f}" for val in row))
 
 
 demand_start_row = icao_row + 8 
@@ -215,7 +215,7 @@ for i in range(n):
         rows.append(row)
 
 df = pd.DataFrame(rows)
-print(df)
+# print(df)
 
 # --- LOGS ---
 df['lnD']    = np.log(df['D'])                  #logarithm to lineariz the model, dat doe je door ln van alles te nemen heeft google mij verteld
@@ -229,7 +229,7 @@ X = sm.add_constant(X)                          # This creates ln(k)
 y = df['lnD']                                   # Dependent variable
 
 model = sm.OLS(y, X).fit()                      # Ordinary least squares
-print(model.summary())
+# print(model.summary())
 
 # --- PARAMETERS ---
 a = model.params['const']            # ln(k)
@@ -241,8 +241,41 @@ b3 = -beta3                          # Because in function it is in the denomina
 
 k = np.exp(a)                       # Making k again after it is a ln()
 
-print("\n--- GRAVITY MODEL PARAMETERS ---")
-print(f"k  = {k}")
-print(f"b1 = {b1:.4f}")
-print(f"b2 = {b2:.4f}")
-print(f"b3 = {b3:.4f}")
+# print("\n--- GRAVITY MODEL PARAMETERS ---")
+# print(f"k  = {k}")
+# print(f"b1 = {b1:.4f}")
+# print(f"b2 = {b2:.4f}")
+# print(f"b3 = {b3:.4f}")
+
+# Maak een lege matrix voor voorspelde demand
+D_pred = np.zeros((n, n))
+
+for i in range(n):
+    for j in range(n):
+        if i == j:
+            D_pred[i, j] = 0  # geen vraag van een stad naar zichzelf
+            continue
+        i_icao = airports[i]
+        j_icao = airports[j]
+
+        pop_product = population_2021_dict[i_icao] * population_2021_dict[j_icao]
+        gdp_product = gdp_2021_dict[i_icao] * gdp_2021_dict[j_icao]
+        fd_ij = dij[i, j]
+
+        D_pred[i, j] = k * (pop_product**b1) * (gdp_product**b2) * ((f * fd_ij)**(beta3))
+
+print("Voorspelde demand (gravity model):")
+print("\t" + "\t".join(airports))
+for i in range(n):
+    print(airports[i], "\t" + "\t".join(f"{D_pred[i,j]:.0f}" for j in range(n)))
+
+
+# Verschilmatrix
+D_diff = D_pred - D  # absoluut verschil
+D_pct  = np.divide(D_diff, D, out=np.zeros_like(D_diff), where=D!=0) * 100  # percentage verschil
+
+print("Absoluut verschil (voorspeld - werkelijke vraag):")
+print("\t" + "\t".join(airports))
+for i in range(n):
+    print(airports[i], "\t" + "\t".join(f"{D_diff[i,j]:.0f}" for j in range(n)))
+
