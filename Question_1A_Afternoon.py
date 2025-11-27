@@ -308,3 +308,25 @@ print(gdp_2026_dict)
 
 print(f'GDP in 2026')
 print(population_2026_dict)
+
+# Demand prediction 2026
+D_pred_26 = np.zeros((n, n))
+
+for i in range(n):
+    for j in range(n):
+        if i == j:
+            D_pred_26[i, j] = 0  # geen vraag van een stad naar zichzelf
+            continue
+        i_icao = airports[i]
+        j_icao = airports[j]
+
+        pop_product_26 = population_2026_dict[i_icao] * population_2026_dict[j_icao]
+        gdp_product_26 = gdp_2026_dict[i_icao] * gdp_2026_dict[j_icao]
+        fd_ij = f * dij[i, j]
+
+        D_pred_26[i, j] = k * (pop_product_26**b1) * (gdp_product_26**b2) * ((fd_ij)**(beta3))
+
+print("Voorspelde demand 2026 (gravity model):")
+print("\t" + "\t".join(airports))
+for i in range(n):
+    print(airports[i], "\t" + "\t".join(f"{D_pred_26[i,j]:.0f}" for j in range(n)))
