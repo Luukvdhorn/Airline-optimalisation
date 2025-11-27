@@ -241,11 +241,11 @@ b3 = -beta3                          # Because in function it is in the denomina
 
 k = np.exp(a)                       # Making k again after it is a ln()
 
-# print("\n--- GRAVITY MODEL PARAMETERS ---")
-# print(f"k  = {k}")
-# print(f"b1 = {b1:.4f}")
-# print(f"b2 = {b2:.4f}")
-# print(f"b3 = {b3:.4f}")
+print("\n--- GRAVITY MODEL PARAMETERS ---")
+print(f"k  = {k}")
+print(f"b1 = {b1:.4f}")
+print(f"b2 = {b2:.4f}")
+print(f"b3 = {b3:.4f}")
 
 # Maak een lege matrix voor voorspelde demand
 D_pred = np.zeros((n, n))
@@ -260,9 +260,9 @@ for i in range(n):
 
         pop_product = population_2021_dict[i_icao] * population_2021_dict[j_icao]
         gdp_product = gdp_2021_dict[i_icao] * gdp_2021_dict[j_icao]
-        fd_ij = dij[i, j]
+        fd_ij = f * dij[i, j]
 
-        D_pred[i, j] = k * (pop_product**b1) * (gdp_product**b2) * ((f * fd_ij)**(beta3))
+        D_pred[i, j] = k * (pop_product**b1) * (gdp_product**b2) * ((fd_ij)**(beta3))
 
 print("Voorspelde demand (gravity model):")
 print("\t" + "\t".join(airports))
@@ -272,10 +272,39 @@ for i in range(n):
 
 # Verschilmatrix
 D_diff = D_pred - D  # absoluut verschil
-D_pct  = np.divide(D_diff, D, out=np.zeros_like(D_diff), where=D!=0) * 100  # percentage verschil
 
 print("Absoluut verschil (voorspeld - werkelijke vraag):")
 print("\t" + "\t".join(airports))
 for i in range(n):
     print(airports[i], "\t" + "\t".join(f"{D_diff[i,j]:.0f}" for j in range(n)))
 
+# POP EN GDP VOORSPELLEN 2026
+population_2026_dict = {}
+for icao in population_2021_dict:
+    pop_2021 = population_2021_dict[icao]
+    pop_2024 = population_2024_dict[icao]
+
+    # jaarlijkse groeivoet
+    g = (pop_2024 / pop_2021)**(1/3)  
+
+    # voorspelling voor 2026
+    pop_2026 = pop_2024 * (g)**2
+    population_2026_dict[icao] = pop_2026
+
+gdp_2026_dict = {}
+for icao in gdp_2021_dict:
+    gdp_2021 = gdp_2021_dict[icao]
+    gdp_2024 = gdp_2024_dict[icao]
+
+    # Grow factor, in 3 years de difference is grow
+    g = (gdp_2024 / gdp_2021)**(1/3)
+
+    # 2026 is amount of 2024 times the grow factor to the power of the difference in years
+    gdp_2026 = gdp_2024 * (g)**2
+    gdp_2026_dict[icao] = gdp_2026
+
+print(f'Population in 2026')
+print(gdp_2026_dict)
+
+print(f'GDP in 2026')
+print(population_2026_dict)
