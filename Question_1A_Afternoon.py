@@ -3,7 +3,7 @@ from openpyxl import *
 from time import *
 import numpy as np
 import math
-import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
 import statsmodels.api as sm
 
@@ -229,7 +229,7 @@ X = sm.add_constant(X)                          # This creates ln(k)
 y = df['lnD']                                   # Dependent variable
 
 model = sm.OLS(y, X).fit()                      # Ordinary least squares
-# print(model.summary())
+print(model.summary())
 
 # --- PARAMETERS ---
 a = model.params['const']            # ln(k)
@@ -330,3 +330,22 @@ print("Voorspelde demand 2026 (gravity model):")
 print("\t" + "\t".join(airports))
 for i in range(n):
     print(airports[i], "\t" + "\t".join(f"{D_pred_26[i,j]:.0f}" for j in range(n)))
+
+# Voorspelde ln(D) met het model
+df['lnD_pred'] = model.predict(X)
+
+# Omzetten naar originele schaal
+df['D_pred'] = np.exp(df['lnD_pred'])
+df['D_actual'] = np.exp(df['lnD'])
+
+# Plot: Werkelijk vs Voorspeld D
+plt.figure(figsize=(8,6))
+plt.scatter(df['D_actual'], df['D_pred'], color='blue', alpha=0.6, label='Data points')
+plt.plot([0, df['D_actual'].max()], [0, df['D_actual'].max()],
+         color='red', lw=2, label='Regression line')
+plt.xlabel('Given demand')
+plt.ylabel('Predicted demand')
+plt.title('Given vs. predicted demand 2021')
+plt.legend()
+plt.grid(True)
+plt.show()
