@@ -1,5 +1,6 @@
 from gurobipy import * 
 from openpyxl import * 
+import openpyxl
 from time import *
 import numpy as np
 import math
@@ -123,7 +124,6 @@ while True:
 wb = load_workbook("DemandGroup40.xlsx", data_only=True)
 ws = wb.active 
 
-
 icao_row = 5    
 lat_row = 6     
 lon_row = 7    
@@ -183,10 +183,10 @@ for i in range(n):
         except:
             D[i, j] = 0
 
-print("Demandmatrix 2021 (week):")
-print("\t" + "\t".join(airports))
-for i in range(n):
-    print(airports[i], "\t" + "\t".join(f"{D[i,j]:.0f}" for j in range(n)))
+# print("Demandmatrix 2021 (week):")
+# print("\t" + "\t".join(airports))
+# for i in range(n):
+#     print(airports[i], "\t" + "\t".join(f"{D[i,j]:.0f}" for j in range(n)))
 
 # Determning B1, B2, B3 and k
 f = 1.42   # fuel cost constant from assignment
@@ -229,7 +229,7 @@ X = sm.add_constant(X)                          # This creates ln(k)
 y = df['lnD']                                   # Dependent variable
 
 model = sm.OLS(y, X).fit()                      # Ordinary least squares
-print(model.summary())
+# print(model.summary())
 
 # --- PARAMETERS ---
 a = model.params['const']            # ln(k)
@@ -241,11 +241,11 @@ b3 = -beta3                          # Because in function it is in the denomina
 
 k = np.exp(a)                       # Making k again after it is a ln()
 
-print("\n--- GRAVITY MODEL PARAMETERS ---")
-print(f"k  = {k}")
-print(f"b1 = {b1:.4f}")
-print(f"b2 = {b2:.4f}")
-print(f"b3 = {b3:.4f}")
+# print("\n--- GRAVITY MODEL PARAMETERS ---")
+# print(f"k  = {k}")
+# print(f"b1 = {b1:.4f}")
+# print(f"b2 = {b2:.4f}")
+# print(f"b3 = {b3:.4f}")
 
 # Maak een lege matrix voor voorspelde demand
 D_pred = np.zeros((n, n))
@@ -264,19 +264,19 @@ for i in range(n):
 
         D_pred[i, j] = k * (pop_product**b1) * (gdp_product**b2) * ((fd_ij)**(beta3))
 
-print("Voorspelde demand (gravity model):")
-print("\t" + "\t".join(airports))
-for i in range(n):
-    print(airports[i], "\t" + "\t".join(f"{D_pred[i,j]:.0f}" for j in range(n)))
+# print("Voorspelde demand (gravity model):")
+# print("\t" + "\t".join(airports))
+# for i in range(n):
+#     print(airports[i], "\t" + "\t".join(f"{D_pred[i,j]:.0f}" for j in range(n)))
 
 
 # Verschilmatrix
 D_diff = D_pred - D  # absoluut verschil
 
-print("Absoluut verschil (voorspeld - werkelijke vraag):")
-print("\t" + "\t".join(airports))
-for i in range(n):
-    print(airports[i], "\t" + "\t".join(f"{D_diff[i,j]:.0f}" for j in range(n)))
+# print("Absoluut verschil (voorspeld - werkelijke vraag):")
+# print("\t" + "\t".join(airports))
+# for i in range(n):
+#     print(airports[i], "\t" + "\t".join(f"{D_diff[i,j]:.0f}" for j in range(n)))
 
 # POP EN GDP VOORSPELLEN 2026
 population_2026_dict = {}
@@ -303,11 +303,11 @@ for icao in gdp_2021_dict:
     gdp_2026 = gdp_2024 * (g)**2
     gdp_2026_dict[icao] = gdp_2026
 
-print(f'Population in 2026')
-print(gdp_2026_dict)
+# print(f'Population in 2026')
+# print(gdp_2026_dict)
 
-print(f'GDP in 2026')
-print(population_2026_dict)
+# print(f'GDP in 2026')
+# print(population_2026_dict)
 
 # Demand prediction 2026
 D_pred_26 = np.zeros((n, n))
@@ -326,10 +326,10 @@ for i in range(n):
 
         D_pred_26[i, j] = k * (pop_product_26**b1) * (gdp_product_26**b2) * ((fd_ij)**(beta3))
 
-print("Voorspelde demand 2026 (gravity model):")
-print("\t" + "\t".join(airports))
-for i in range(n):
-    print(airports[i], "\t" + "\t".join(f"{D_pred_26[i,j]:.0f}" for j in range(n)))
+# print("Voorspelde demand 2026 (gravity model):")
+# print("\t" + "\t".join(airports))
+# for i in range(n):
+#     print(airports[i], "\t" + "\t".join(f"{D_pred_26[i,j]:.0f}" for j in range(n)))
 
 # Voorspelde ln(D) met het model
 df['lnD_pred'] = model.predict(X)
@@ -338,14 +338,112 @@ df['lnD_pred'] = model.predict(X)
 df['D_pred'] = np.exp(df['lnD_pred'])
 df['D_actual'] = np.exp(df['lnD'])
 
-# Plot: Werkelijk vs Voorspeld D
-plt.figure(figsize=(8,6))
-plt.scatter(df['D_actual'], df['D_pred'], color='blue', alpha=0.6, label='Data points')
-plt.plot([0, df['D_actual'].max()], [0, df['D_actual'].max()],
-         color='red', lw=2, label='Regression line')
-plt.xlabel('Given demand')
-plt.ylabel('Predicted demand')
-plt.title('Given vs. predicted demand 2021')
-plt.legend()
-plt.grid(True)
-plt.show()
+# # Plot: Werkelijk vs Voorspeld D
+# plt.figure(figsize=(8,6))
+# plt.scatter(df['D_actual'], df['D_pred'], color='blue', alpha=0.6, label='Data points')
+# plt.plot([0, df['D_actual'].max()], [0, df['D_actual'].max()],
+#          color='red', lw=2, label='Regression line')
+# plt.xlabel('Given demand')
+# plt.ylabel('Predicted demand')
+# plt.title('Given vs. predicted demand 2021')
+# plt.legend()
+# plt.grid(True)
+# plt.show()
+
+
+### Implementatie van mathematical model ###
+
+from gurobipy import *
+
+# Inladen aircraft
+# --- Workbook openen ---
+wb2 = openpyxl.load_workbook("AircraftData.xlsx")
+sheet2 = wb2.active   # neem het eerste werkblad
+
+# Lees de header (aircraft names)
+aircraft_names = [cell.value for cell in sheet2[1][1:]]  # rij 1, vanaf kolom B
+
+data = {}
+
+# Loop door rijen en vul dictionary
+for row in sheet2.iter_rows(min_row=3, values_only=True):
+    if row[0] is None:
+        continue
+    
+    parameter_name = row[0]
+    values = row[1:]
+    
+    data[parameter_name] = values
+
+# DataFrame bouwen (transpose zodat aircraft types rijen worden)
+df_aircraft = pd.DataFrame(data, index=aircraft_names)
+df_aircraft = df_aircraft.drop(columns=["Aircraft Characteristics"])
+
+
+# Data - Sets
+N = range(len(airports))                    # Set of airports; i, j in N
+K = range(len(df_aircraft))                 # Set of aircrafts; k in K
+ac = len(df_aircraft)                        # Total amount of aircrafts
+
+# Data - parameters
+q = np.zeros((n, n))                        # Demand between orgin i and destination j
+for i in N:
+    for j in N:
+        q[i, j] = D_pred_26[i, j]
+
+d = np.zeros((n, n))                        # Distance between i and j
+for i in N:
+    for j in N:
+        d[i, j] = dij[i, j]
+
+y = np.zeros((n, n))                        # Yield in euro betwee i and j
+for i in N:
+    for j in N:
+        y[i, j] = 5.9 * d[i, j]**(-0.76) + 0.043
+
+s = np.zeros(ac)
+for k in K:
+    s[k] = df_aircraft['Seats'][k]
+
+v = np.zeros(ac)
+for k in K:
+    v[k] = df_aircraft['Speed [km/h]'][k]
+
+t = np.zeros(ac)
+for k in K:
+    t[k] = df_aircraft['Average TAT [mins]'][k]
+
+ra = np.zeros(ac)
+for k in K:
+    ra[k] = df_aircraft['Maximum range [km]'][k]
+
+RAC = np.zeros(ac)
+for k in K:
+    RAC[k] = df_aircraft['Runway required [m]'][k]
+
+cl = np.zeros(ac)
+for k in K:
+    cl[k] = df_aircraft['Weekly lease cost [€]'][k]
+
+C = np.zeros(ac)
+for k in K:
+    C[k] = df_aircraft['Fixed operating cost C_X [€]'][k]
+
+CT = np.zeros(ac)
+for k in K:
+    CT[k] = df_aircraft['Time cost parameter C_T [€/hr]'][k]
+
+C_Tij = np.zeros((ac, n, n))
+for k in K:
+    C_Tij[k, :, :] = CT[k] * (d / v[k])
+
+CF = np.zeros(ac)
+for k in K:
+    CF[k] = df_aircraft['Fuel cost parameter C_F'][k]
+
+C_Fij = np.zeros((ac, n, n))
+for k in K:
+    C_Fij[k, :, :] = ((CF[k] * 1.42) / 1.5) * d
+
+for k in K:
+    print(f'For Aircraf {k} fuel cost is {C_Fij[k]}')
