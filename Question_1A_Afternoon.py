@@ -396,10 +396,14 @@ for i in N:
     for j in N:
         d[i, j] = dij[i, j]
 
-y = np.zeros((n, n))                        # Yield in euro betwee i and j
-for i in N:
+y = np.zeros((n, n))
+for i in N:                                 #YIELD
     for j in N:
-        y[i, j] = 5.9 * d[i, j]**(-0.76) + 0.043
+        if d[i, j] > 0:
+            y[i, j] = 5.9 * d[i, j]**(-0.76) + 0.043
+        else:
+            y[i, j] = 0   
+
 
 s = np.zeros(ac)
 for k in K:
@@ -447,3 +451,47 @@ for k in K:
 
 for k in K:
     print(f'For Aircraf {k} fuel cost is {C_Fij[k]}')
+
+Ck_ij = np.zeros((ac, n, n))
+
+for k in K:
+    for i in N:
+        for j in N:
+            Ck_ij[k, i, j] = C[k] + C_Tij[k, i, j] + C_Fij[k, i, j]
+ 
+
+
+#hier moeten de laaste paar parameters nog komen. Ik ga alvast verder met het model
+
+from gurobipy import Model, GRB, quicksum
+
+def main():
+    model = Model("Model_1B")
+
+    x = model.addVars(N, N, name="x", vtype=GRB.CONTINUOUS, lb=0)
+    w = model.addVars(N, N, name="w", vtype=GRB.CONTINUOUS, lb=0)
+    z = model.addVars(N, N, K, name="z", vtype=GRB.CONTINUOUS, lb=0)
+    AC = model.addVars(K, name="AC", vtype=GRB.CONTINUOUS, lb=0)
+
+
+    #objective:
+    
+    Objective_1B = quicksum(y[i, j] * d[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K)  for i in N for j in N) - quicksum(cl[k] * AC[k] for k in K)
+    
+
+    model.setObjective(Objective_1B, GRB.MAXIMIZE)
+
+    # Constraints toe:
+  
+  
+    model.optimize()
+
+    if model.status == GRB.OPTIMAL:
+        print(f"Optimal objective value = {model.objVal}")
+        print("Example variable values:")
+        print("y:", {(i,j): y[i,j].X for i in N for j in N})
+    else:
+        print("No optimal solution found")
+
+if __name__ == "__main__":
+    main()
