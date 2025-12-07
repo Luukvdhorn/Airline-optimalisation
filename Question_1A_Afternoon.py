@@ -450,7 +450,7 @@ for k in K:
     C_Fij[k, :, :] = ((CF[k] * 1.42) / 1.5) * d
 
 for k in K:
-    print(f'For Aircraf {k} fuel cost is {C_Fij[k]}')
+    (f'For Aircraf {k} fuel cost is {C_Fij[k]}')
 
 Ck_ij = np.zeros((ac, n, n))
 
@@ -487,14 +487,10 @@ def main():
     model.optimize()
 
     if model.status == GRB.OPTIMAL:
-        print(f"Optimal objective value = {model.objVal}")
-        print("Example variable values:")
-        
-
-        print("x:", {(i,j): x[i,j].X for i in N for j in N})
-        print("w:", {(i,j): w[i,j].X for i in N for j in N})
-        print("z:", {(i,j,k): z[i,j,k].X for i in N for j in N for k in K})
-        print("AC:", {k: AC[k].X for k in K})
+        totale_winst = model.ObjVal  # Gurobi bewaart de optimale objective value hier
+        print(f"Totaal winst: €{totale_winst:.2f}")
     else:
         print("No optimal solution found")
+
+   
 
