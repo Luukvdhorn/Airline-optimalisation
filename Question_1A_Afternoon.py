@@ -489,9 +489,12 @@ def main():
     if model.status == GRB.OPTIMAL:
         print(f"Optimal objective value = {model.objVal}")
         print("Example variable values:")
-        print("y:", {(i,j): y[i,j].X for i in N for j in N})
+        
+
+        print("x:", {(i,j): x[i,j].X for i in N for j in N})
+        print("w:", {(i,j): w[i,j].X for i in N for j in N})
+        print("z:", {(i,j,k): z[i,j,k].X for i in N for j in N for k in K})
+        print("AC:", {k: AC[k].X for k in K})
     else:
         print("No optimal solution found")
 
-if __name__ == "__main__":
-    main()
