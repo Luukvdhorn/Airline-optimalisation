@@ -8,6 +8,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import statsmodels.api as sm
 
+import sys
+print(sys.executable)
+
+
 wb = load_workbook("pop.xlsx", data_only=True)
 ws = wb["General"]
 
@@ -442,6 +446,10 @@ RAC = np.zeros(ac)
 for k in K:
     RAC[k] = df_aircraft['Runway required [m]'][k]
 
+RAP = np.zeros(n)
+for j in N:
+    RAP[j] = runways[j]
+
 cl = np.zeros(ac)
 for k in K:
     cl[k] = df_aircraft['Weekly lease cost [€]'][k]
@@ -488,10 +496,9 @@ for i in N:
 g = np.ones(n)    
 g[hub_index] = 0 
 
-
 LF = 0.75                                                              # Loadfactor, given
 
-BT = 70                                                                # Available hours a day
+BT = 70                                                                # Available hours in a week per airplaine
 
 TS = np.zeros(n)                                                       # Amount of available time slots
 for j in N:
@@ -501,8 +508,6 @@ TAT = np.zeros(ac)
 for k in K:
     TAT[k] = df_aircraft['Average TAT [mins]'][k]/60
 
- 
-
 #hier moeten de laaste paar parameters nog komen. Ik ga alvast verder met het model
 
 from gurobipy import Model, GRB, quicksum
@@ -510,18 +515,14 @@ from gurobipy import Model, GRB, quicksum
 def main():
     model = Model("Model_1B")
 
-    x = model.addVars(N, N, name="x", vtype=GRB.CONTINUOUS, lb=0)
-    w = model.addVars(N, N, name="w", vtype=GRB.CONTINUOUS, lb=0)
+    x = model.addVars(N, N, name="x", vtype=GRB.INTEGER, lb=0)
+    w = model.addVars(N, N, name="w", vtype=GRB.INTEGER, lb=0)
     z = model.addVars(N, N, K, name="z", vtype=GRB.INTEGER, lb=0)
     AC = model.addVars(K, name="AC", vtype=GRB.INTEGER, lb=0)
 
-
-
-
-
     #objective:
     
-    Objective_1B = quicksum(y[i, j] * d[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K)  for i in N for j in N) - quicksum(cl[k] * AC[k] for k in K)
+    Objective_1B = quicksum(y[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K)  for i in N for j in N) - quicksum(cl[k] * AC[k] for k in K)
     
 
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
@@ -536,34 +537,45 @@ def main():
     #return constrain:
     for k in K:
         for i in N:
-            model.addConstr(z[i, 0, k] == z[i, 0, k], name=f"balance_{k}_{i}")
+            model.addConstr(z[0, i, k] == z[i, 0, k], name=f"balance_{k}_{i}")
 
     for i in N:
         for j in N:
             model.addConstr(w[i,j]<= q[i,j] * g[i] * g[j],name=f"transfer")
+    
+    # #passengers smaller than amount of seats 
+    # for i in N:
+    #     for j in N:
+    #         lhs = x[i,j] + quicksum(w[i,m]*(1 - g[j]) for m in N) + quicksum(w[m,j]*(1 - g[i]) for m in N)
+    #         rhs = quicksum(z[i,j,k] * s[k] * LF for k in K)
+    #         model.addConstr(lhs <= rhs, name=f"cap_constraint_{i}_{j}")
+    
 
-    
-    #passengers smaller than amount of seats 
-    for i in N:
-        for j in N:
-            lhs = x[i,j] + quicksum(w[i,m]*(1 - g[j]) for m in N) + quicksum(w[m,j]*(1 - g[i]) for m in N)
-            rhs = quicksum(z[i,j,k]*s[k]*LF for k in K)
-            model.addConstr(lhs <= rhs, name=f"cap_constraint_{i}_{j}")
-    
-    
     #duration of flights
-    #for k in K:
-     #   lhs = quicksum(((d[i,j]/v[k]+ TAT[k] + (TAT[k] * 0.5 *g[j]))*z[i, j, k]) for i in N for j in N)
-      #  rhs = BT *AC[k]
-       # model.addConstr(lhs <= rhs)
+    for k in K:
+       lhs2 = quicksum(((d[i,j]/v[k]+ TAT[k] + (TAT[k] * 0.5 *(1 -g[j]))) * z[i, j, k]) for i in N for j in N)
+       rhs2 = BT * AC[k]
+       model.addConstr(lhs2 <= rhs2)
     
 
     #runway constrains
-    for i in N:
-        for j in N:
-            for k in K:
+    for k in K:
+        for i in N:
+            for j in N:
                 model.addConstr(z[i,j,k] <= a[i,j,k], name=f"reach_{i}_{j}_{k}")
 
+    for k in K:
+        for i in N:
+            for j in N:
+                model.addConstr(RAC[k] * z[i, j, k] <= RAP[i] * z[i, j, k], name=f'Runway_dep_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
+
+    for k in K:
+        for i in N:
+            for j in N:
+                model.addConstr(RAC[k] * z[i, j, k] <= RAP[j] * z[i, j, k], name=f'Runway_arr_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
+
+    for j in N:
+        model.addConstr(quicksum(z[i, j, k] for i in N for k in K) <= TS[j], name=f'Time_slots_{j}')
  
     model.optimize()
 
@@ -576,7 +588,12 @@ def main():
             print(f"{df_aircraft.index[k]}: {AC[k].X:.0f}")
             
         totaal_passagiers = sum(x[i, j].X for i in N for j in N)
-        print(f"\nTotaal aantal unieke passagiers: {totaal_passagiers:.0f}")
+        print(f"\nTotaal aantal passagiers die reizen van of naar de hub: {totaal_passagiers:.0f}")
+
+        transfer_passagiers = sum(w[i, j].X for i in N for j in N)
+        print(f'\n Aantal passagiers die transfer hebben op de hub {transfer_passagiers}')
+
+
 
 
 
