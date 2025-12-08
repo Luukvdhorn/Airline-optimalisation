@@ -120,14 +120,21 @@ while True:
 # print("GDP 2024:")
 # print(gdp_2024_dict)
 
-
 wb = load_workbook("DemandGroup40.xlsx", data_only=True)
-ws = wb.active 
+ws = wb.active
 
 icao_row = 5    
-lat_row = 6     
+lat_row = 6    
 lon_row = 7    
-start_col = 3   
+start_col = 3
+runway_row = 8
+slots_row  = 9
+runways = []
+slots = []
+hub_index = 2  # Amsterdam
+
+
+
 
 airports = []
 latitudes = []
@@ -138,12 +145,20 @@ while True:
     icao = ws.cell(row=icao_row, column=col).value
     lat = ws.cell(row=lat_row, column=col).value
     lon = ws.cell(row=lon_row, column=col).value
+    runway = ws.cell(row=runway_row, column=col).value
+    slot = ws.cell(row=slots_row, column=col).value
     if icao is None:
         break
     airports.append(icao)
     latitudes.append(float(lat))
     longitudes.append(float(lon))
+    runways.append(float(runway))
+    if slot == '-':
+        slots.append(float('inf'))
+    else:
+        slots.append(float(slot))
     col += 1
+
 
 
 RE = 6371.0 
@@ -379,6 +394,8 @@ for row in sheet2.iter_rows(min_row=3, values_only=True):
 df_aircraft = pd.DataFrame(data, index=aircraft_names)
 df_aircraft = df_aircraft.drop(columns=["Aircraft Characteristics"])
 
+print(df_aircraft)
+
 
 # Data - Sets
 N = range(len(airports))                    # Set of airports; i, j in N
@@ -453,13 +470,38 @@ for k in K:
     (f'For Aircraf {k} fuel cost is {C_Fij[k]}')
 
 Ck_ij = np.zeros((ac, n, n))
-
 for k in K:
     for i in N:
         for j in N:
             Ck_ij[k, i, j] = C[k] + C_Tij[k, i, j] + C_Fij[k, i, j]
- 
 
+
+a = {}
+for i in N:
+    for j in N:
+        for k in K:
+            if d[i,j] <= ra[k]:
+                a[i,j,k] = 10000
+            else:
+                a[i,j,k] = 0
+
+g = np.ones(n)    
+g[hub_index] = 0 
+
+
+LF = 0.75                                                              # Loadfactor, given
+
+BT = 70                                                                # Available hours a day
+
+TS = np.zeros(n)                                                       # Amount of available time slots
+for j in N:
+    TS[j] = slots[j]
+
+TAT = np.zeros(ac)
+for k in K:
+    TAT[k] = df_aircraft['Average TAT [mins]'][k]/60
+
+ 
 
 #hier moeten de laaste paar parameters nog komen. Ik ga alvast verder met het model
 
@@ -470,8 +512,11 @@ def main():
 
     x = model.addVars(N, N, name="x", vtype=GRB.CONTINUOUS, lb=0)
     w = model.addVars(N, N, name="w", vtype=GRB.CONTINUOUS, lb=0)
-    z = model.addVars(N, N, K, name="z", vtype=GRB.CONTINUOUS, lb=0)
-    AC = model.addVars(K, name="AC", vtype=GRB.CONTINUOUS, lb=0)
+    z = model.addVars(N, N, K, name="z", vtype=GRB.INTEGER, lb=0)
+    AC = model.addVars(K, name="AC", vtype=GRB.INTEGER, lb=0)
+
+
+
 
 
     #objective:
@@ -482,15 +527,72 @@ def main():
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
 
     # Constraints toe:
-  
+
+    #passengers smaller than demand
+    for i in N:
+        for j in N:
+            model.addConstr(x[i, j] + w[i, j] <= q[i, j], name=f"demand_limit_{i}_{j}")
+
+    #return constrain:
+    for k in K:
+        for i in N:
+            model.addConstr(z[i, 0, k] == z[i, 0, k], name=f"balance_{k}_{i}")
+
+    for i in N:
+        for j in N:
+            model.addConstr(w[i,j]<= q[i,j] * g[i] * g[j],name=f"transfer")
+
+    
+    #passengers smaller than amount of seats 
+    for i in N:
+        for j in N:
+            lhs = x[i,j] + quicksum(w[i,m]*(1 - g[j]) for m in N) + quicksum(w[m,j]*(1 - g[i]) for m in N)
+            rhs = quicksum(z[i,j,k]*s[k]*LF for k in K)
+            model.addConstr(lhs <= rhs, name=f"cap_constraint_{i}_{j}")
+    
+    
+    #duration of flights
+    #for k in K:
+     #   lhs = quicksum(((d[i,j]/v[k]+ TAT[k] + (TAT[k] * 0.5 *g[j]))*z[i, j, k]) for i in N for j in N)
+      #  rhs = BT *AC[k]
+       # model.addConstr(lhs <= rhs)
+    
+
+    #runway constrains
+    for i in N:
+        for j in N:
+            for k in K:
+                model.addConstr(z[i,j,k] <= a[i,j,k], name=f"reach_{i}_{j}_{k}")
+
+    
+    for i in N:
+        for j in N:
+            for k in K:
+                model.addConstr(z[i,j,k] <= AC[k] * s[k] * LF, name=f"ac_coupling_{i}_{j}_{k}")
+
+
+
   
     model.optimize()
 
     if model.status == GRB.OPTIMAL:
-        totale_winst = model.ObjVal  # Gurobi bewaart de optimale objective value hier
+        totale_winst = model.ObjVal  
         print(f"Totaal winst: €{totale_winst:.2f}")
+
+        print("\nAantal benodigde vliegtuigen per type:")
+        for k in K:
+            print(f"{df_aircraft.index[k]}: {AC[k].X:.0f}")
+            
+        totaal_passagiers = sum(x[i, j].X for i in N for j in N)
+        print(f"\nTotaal aantal unieke passagiers: {totaal_passagiers:.0f}")
+
+
+
     else:
         print("No optimal solution found")
+
+main()
+
 
    
 
