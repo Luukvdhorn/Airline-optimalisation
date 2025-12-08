@@ -564,15 +564,7 @@ def main():
             for k in K:
                 model.addConstr(z[i,j,k] <= a[i,j,k], name=f"reach_{i}_{j}_{k}")
 
-    
-    for i in N:
-        for j in N:
-            for k in K:
-                model.addConstr(z[i,j,k] <= AC[k] * s[k] * LF, name=f"ac_coupling_{i}_{j}_{k}")
-
-
-
-  
+ 
     model.optimize()
 
     if model.status == GRB.OPTIMAL:
