@@ -522,58 +522,68 @@ def main():
 
     #objective:
     
-    Objective_1B = quicksum(y[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K)  for i in N for j in N) - quicksum(cl[k] * AC[k] for k in K)
+    Objective_1B = quicksum(y[i, j] * d[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K) for i in N for j in N) # - quicksum(cl[k] * AC[k] for k in K) weggelaten, nu werkt t wel
     
 
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
 
-    # Constraints toe:
-
+    # Constraints:
     #passengers smaller than demand
     for i in N:
         for j in N:
             model.addConstr(x[i, j] + w[i, j] <= q[i, j], name=f"demand_limit_{i}_{j}")
+
+    for i in N:
+        for j in N:
+            model.addConstr(w[i,j]<= q[i,j] * g[i] * g[j],name=f"transfer")
 
     #return constrain:
     for k in K:
         for i in N:
             model.addConstr(z[0, i, k] == z[i, 0, k], name=f"balance_{k}_{i}")
 
+    
+
+    #test return constrain met som
     for i in N:
-        for j in N:
-            model.addConstr(w[i,j]<= q[i,j] * g[i] * g[j],name=f"transfer")
+        for k in K:
+            lhs = quicksum(z[i, j, k] for j in N)
+            rhs = quicksum(z[j, i, k] for j in N)
+            model.addConstr(lhs == rhs, name=f"return_constrain_{i}_{k}")
     
     # #passengers smaller than amount of seats 
-    # for i in N:
-    #     for j in N:
-    #         lhs = x[i,j] + quicksum(w[i,m]*(1 - g[j]) for m in N) + quicksum(w[m,j]*(1 - g[i]) for m in N)
-    #         rhs = quicksum(z[i,j,k] * s[k] * LF for k in K)
-    #         model.addConstr(lhs <= rhs, name=f"cap_constraint_{i}_{j}")
+    for i in N:
+        for j in N:
+            lhs = x[i,j] + quicksum(w[i,m]*(1 - g[j]) for m in N) + quicksum(w[m,j]*(1 - g[i]) for m in N)
+            rhs = quicksum((z[i,j,k] * s[k] * LF) for k in K)
+            model.addConstr(lhs <= rhs, name=f"cap_constraint_{i}_{j}")
     
 
     #duration of flights
     for k in K:
-       lhs2 = quicksum(((d[i,j]/v[k]+ TAT[k] + (TAT[k] * 0.5 *(1 -g[j]))) * z[i, j, k]) for i in N for j in N)
+       lhs2 = quicksum(( ( (d[i,j]/v[k])+ TAT[k] + (TAT[k] * 0.5 * g[j])) * z[i, j, k]) for i in N for j in N)
        rhs2 = BT * AC[k]
        model.addConstr(lhs2 <= rhs2)
     
 
-    #runway constrains
+    # range constrains
     for k in K:
         for i in N:
             for j in N:
-                model.addConstr(z[i,j,k] <= a[i,j,k], name=f"reach_{i}_{j}_{k}")
+                model.addConstr(z[i, j, k] <= a[i, j, k], name=f"reach_{i}_{j}_{k}")
+
+    #runway constraints
+    for k in K:
+        for i in N:
+            for j in N:
+                model.addConstr(RAC[k] * z[i, j, k] <= RAP[i], name=f'Runway_dep_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
 
     for k in K:
         for i in N:
             for j in N:
-                model.addConstr(RAC[k] * z[i, j, k] <= RAP[i] * z[i, j, k], name=f'Runway_dep_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
+                model.addConstr(RAC[k] * z[i, j, k] <= RAP[j], name=f'Runway_arr_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
 
-    for k in K:
-        for i in N:
-            for j in N:
-                model.addConstr(RAC[k] * z[i, j, k] <= RAP[j] * z[i, j, k], name=f'Runway_arr_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
-
+    #timeslot constraints
     for j in N:
         model.addConstr(quicksum(z[i, j, k] for i in N for k in K) <= TS[j], name=f'Time_slots_{j}')
  
@@ -604,4 +614,3 @@ main()
 
 
    
-
