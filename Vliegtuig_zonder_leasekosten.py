@@ -417,6 +417,7 @@ for i in N:
     for j in N:
         d[i, j] = dij[i, j]
 
+
 y = np.zeros((n, n))
 for i in N:                                 #YIELD
     for j in N:
@@ -465,7 +466,8 @@ for k in K:
 
 C_Tij = np.zeros((ac, n, n))
 for k in K:
-    C_Tij[k, :, :] = CT[k] * (d / v[k])
+    C_Tij[k, :, :] = CT[k] * (d/ v[k])
+    print(C_Tij)
 
 CF = np.zeros(ac)
 for k in K:
@@ -483,7 +485,7 @@ for k in K:
     for i in N:
         for j in N:
             Ck_ij[k, i, j] = C[k] + C_Tij[k, i, j] + C_Fij[k, i, j]
-
+            
 
 a = {}
 for i in N:
@@ -509,6 +511,7 @@ TAT = np.zeros(ac)
 for k in K:
     TAT[k] = df_aircraft['Average TAT [mins]'][k]/60
 
+
 #hier moeten de laaste paar parameters nog komen. Ik ga alvast verder met het model
 
 from gurobipy import Model, GRB, quicksum
@@ -525,6 +528,8 @@ def main():
     
     Objective_1B = quicksum(y[i, j] * d[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K) for i in N for j in N) #- quicksum(cl[k] * AC[k] for k in K)
     
+
+
 
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
     
@@ -545,14 +550,14 @@ def main():
         for j in N:
             model.addConstr(w[i,j]<= q[i,j] * g[i] * g[j],name=f"transfer")
 
-    #return constrain:
-    for k in K:
-        for i in N:
-            model.addConstr(z[0, i, k] == z[i, 0, k], name=f"balance_{k}_{i}")
+    #return constrain: (doet deze nog wat? index 0 moet wss de hub zijn dan, hub_index?)
+    #for k in K:
+     #   for i in N:
+      #      model.addConstr(z[0, i, k] == z[i, 0, k], name=f"balance_{k}_{i}")
 
     
 
-    #test return constrain met som
+    #balance incomming and outgoing
     for i in N:
         for k in K:
             lhs = quicksum(z[i, j, k] for j in N)
@@ -623,6 +628,22 @@ def main():
                     if z[i,j,k].X > 0.5:   # threshold om integer rounding te vermijden
                         print(f"{airports[i]} → {airports[j]} met {df_aircraft.index[k]} "
                             f"aantal vluchten: {z[i,j,k].X:.0f}")
+                        
+        print("\nVliegtijd per individueel vliegtuig:")
+        for k in K:
+            total_hours_k = sum(
+                ((d[i, j] / v[k]) + TAT[k] + (TAT[k] * 0.5 * g[j])) * z[i, j, k].X
+                for i in N for j in N
+            )
+
+            num_aircraft = AC[k].X
+
+            if num_aircraft > 0:
+                hours_per_aircraft = total_hours_k / num_aircraft
+                print(f"Type {k}: {hours_per_aircraft:.2f} uur per vliegtuig")
+            else:
+                print(f"Type {k}: geen vliegtuigen gebruikt")
+
 
 
 
@@ -631,6 +652,9 @@ def main():
         print("No optimal solution found")
 
 main()
+
+
+
 
 
    
