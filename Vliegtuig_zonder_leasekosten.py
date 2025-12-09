@@ -453,6 +453,7 @@ for j in N:
 cl = np.zeros(ac)
 for k in K:
     cl[k] = df_aircraft['Weekly lease cost [€]'][k]
+    print(cl[k])
 
 C = np.zeros(ac)
 for k in K:
@@ -522,10 +523,17 @@ def main():
 
     #objective:
     
-    Objective_1B = quicksum(y[i, j] * d[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K) for i in N for j in N) # - quicksum(cl[k] * AC[k] for k in K) weggelaten, nu werkt t wel
+    Objective_1B = quicksum(y[i, j] * d[i, j] * (x[i, j] + w[i, j]) - quicksum(Ck_ij[k, i, j] * z[i, j, k] for k in K) for i in N for j in N) #- quicksum(cl[k] * AC[k] for k in K)
     
 
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
+    
+    #nieuwe constrain die dwingt dat er altijd via de hub wordt gevlogen
+    for i in N:
+        for j in N:
+            if i != hub_index and j != hub_index:
+                for k in K:
+                    model.addConstr(z[i,j,k] == 0, name=f"no_direct_{i}_{j}_{k}")
 
     # Constraints:
     #passengers smaller than demand
@@ -557,12 +565,13 @@ def main():
             lhs = x[i,j] + quicksum(w[i,m]*(1 - g[j]) for m in N) + quicksum(w[m,j]*(1 - g[i]) for m in N)
             rhs = quicksum((z[i,j,k] * s[k] * LF) for k in K)
             model.addConstr(lhs <= rhs, name=f"cap_constraint_{i}_{j}")
-    
+       
+
 
     #duration of flights
     for k in K:
        lhs2 = quicksum(( ( (d[i,j]/v[k])+ TAT[k] + (TAT[k] * 0.5 * g[j])) * z[i, j, k]) for i in N for j in N)
-       rhs2 = BT * AC[k]
+       rhs2 = (BT * AC[k])
        model.addConstr(lhs2 <= rhs2)
     
 
@@ -586,7 +595,10 @@ def main():
     #timeslot constraints
     for j in N:
         model.addConstr(quicksum(z[i, j, k] for i in N for k in K) <= TS[j], name=f'Time_slots_{j}')
- 
+    
+  
+
+
     model.optimize()
 
     if model.status == GRB.OPTIMAL:
@@ -603,6 +615,14 @@ def main():
         transfer_passagiers = sum(w[i, j].X for i in N for j in N)
         print(f'\n Aantal passagiers die transfer hebben op de hub {transfer_passagiers}')
 
+        print("\nGevlogen routes (z[i,j,k] > 0):")
+       
+        for i in N:
+            for j in N:
+                for k in K:
+                    if z[i,j,k].X > 0.5:   # threshold om integer rounding te vermijden
+                        print(f"{airports[i]} → {airports[j]} met {df_aircraft.index[k]} "
+                            f"aantal vluchten: {z[i,j,k].X:.0f}")
 
 
 
