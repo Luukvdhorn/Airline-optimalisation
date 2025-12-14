@@ -549,7 +549,7 @@ def main():
     #         for k in K:
     #             model.addConstr(z[i, j, k] * g[i] * g[j] == 0, name=f"via_hub_{i}_{j}_{k}")
 
-    # hub constr do 
+    # hub constr die dwingt dat er altijd via de hub wordt gevlogen (do)
     for i in N:
         for j in N:
             if i != hub_index and j != hub_index:
@@ -571,17 +571,32 @@ def main():
             rhs1 = quicksum((z[i, j, k]  * s[k] * LF) for k in K)
             model.addConstr(lhs1 <= rhs1, name=f"cap_constraint_{i}_{j}")
 
+# # passengers smaller than amount of seats met toevoeging martijn
+#     for i in N:
+#         for j in N:
+#             lhs1 = (x[i, j] + quicksum(w[i, m] * (1 - g[j]) for m in N if m != i and m != j) + quicksum(w[m, j] * (1 - g[i]) for m in N if m != i and m != j))
+#             rhs1 = quicksum((z[i, j, k]  * s[k] * LF) for k in K)
+#             model.addConstr(lhs1 <= rhs1, name=f"cap_constraint_{i}_{j}")
+
+
     # #duration of flights basic
     # for k in K:
     #    lhs2 = quicksum( (((d[i, j] / v[k]) + TAT[k]) * z[i, j, k] ) for i in N for j in N)
     #    rhs2 = (BT * AC[k])
     #    model.addConstr(lhs2 <= rhs2)
 
-       #duration poging 200
+    #    #duration poging 200 --> met haakjes om de totale som van de tijd * z_ijk geeft alles 0, maar moet wel zo denk ik
+    # for k in K:
+    #     lhs3 = quicksum(((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - (g[i] * g[j] )))) * z[i, j, k]  for i in N for j in N) 
+    #     rhs3 = (BT * AC[k]) 
+    #     model.addConstr(lhs3 <= rhs3, name=f"duration_constrain_{k}")
+
+           #duration poging 300 --> geen haakjes om de totale som van de tijd * z_ijk, dit klopt eigenlijk niet, maar zo krijg je wel een oplossing
     for k in K:
         lhs3 = quicksum((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - (g[i] * g[j] ))) * z[i, j, k]  for i in N for j in N) 
         rhs3 = (BT * AC[k]) 
         model.addConstr(lhs3 <= rhs3, name=f"duration_constrain_{k}")
+
 
     # range constrains
     for k in K:
@@ -613,7 +628,6 @@ def main():
     if model.status == GRB.OPTIMAL or model.status == GRB.TIME_LIMIT:
         totale_winst = model.ObjVal  
         print(f"Totaal winst: €{totale_winst:.2f}")
-        print(d)
 
         print("\nAantal benodigde vliegtuigen per type:")
         for k in K:
