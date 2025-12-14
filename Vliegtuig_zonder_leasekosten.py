@@ -138,8 +138,6 @@ slots = []
 hub_index = 2  # Amsterdam
 
 
-
-
 airports = []
 latitudes = []
 longitudes = []
@@ -534,6 +532,13 @@ def main():
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
 
     # Constraints:
+    # model.addConstr(quicksum(x[i, j] >= 1 for i in N for j in N), name="at_least_one_flight")
+    # model.addConstr(quicksum(w[i, j] >= 1 for i in N for j in N), name="at_least_one_flight")
+    # model.addConstr(quicksum(z[i, j, k] >= 1 for i in N for j in N for k in K), name="at_least_one_flight")
+    # model.addConstr(quicksum(AC[k] >= 1 for k in K), name="at_least_one_aircraft")
+
+
+
     #passengers smaller than demand
     for i in N:
         for j in N:
