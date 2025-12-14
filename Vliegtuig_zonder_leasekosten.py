@@ -258,7 +258,7 @@ b2 = model.params['ln_gdp']
 beta3 = model.params['ln_fd']        # = -b3 (afstand in noemer)
 b3 = -beta3                          # Because in function it is in the denominator
 
-k = np.exp(a)                       # Making k again after it is a ln()
+k1 = np.exp(a)                       # Making k again after it is a ln()
 
 # print("\n--- GRAVITY MODEL PARAMETERS ---")
 # print(f"k  = {k}")
@@ -281,7 +281,7 @@ for i in range(n):
         gdp_product = gdp_2021_dict[i_icao] * gdp_2021_dict[j_icao]
         fd_ij = f * dij[i, j]
 
-        D_pred[i, j] = k * (pop_product**b1) * (gdp_product**b2) * ((fd_ij)**(beta3))
+        D_pred[i, j] = k1 * (pop_product**b1) * (gdp_product**b2) * ((fd_ij)**(beta3))
 
 # print("Voorspelde demand (gravity model):")
 # print("\t" + "\t".join(airports))
@@ -343,7 +343,7 @@ for i in range(n):
         gdp_product_26 = gdp_2026_dict[i_icao] * gdp_2026_dict[j_icao]
         fd_ij = f * dij[i, j]
 
-        D_pred_26[i, j] = k * (pop_product_26**b1) * (gdp_product_26**b2) * ((fd_ij)**(beta3))
+        D_pred_26[i, j] = k1 * (pop_product_26**b1) * (gdp_product_26**b2) * ((fd_ij)**(beta3))
 
 # print("Voorspelde demand 2026 (gravity model):")
 # print("\t" + "\t".join(airports))
@@ -464,27 +464,27 @@ CT = np.zeros(ac)
 for k in K:
     CT[k] = df_aircraft['Time cost parameter C_T [€/hr]'][k]
 
-C_Tij = np.zeros((ac, n, n))
+C_Tij = np.zeros((n, n, ac))
 for k in K:
-    C_Tij[k, :, :] = CT[k] * (d/ v[k])
+    C_Tij[ :, :,k] = CT[k] * (d/ v[k])
     print(C_Tij)
 
 CF = np.zeros(ac)
 for k in K:
     CF[k] = df_aircraft['Fuel cost parameter C_F'][k]
 
-C_Fij = np.zeros((ac, n, n))
+C_Fij = np.zeros((n, n, ac))
 for k in K:
-    C_Fij[k, :, :] = ((CF[k] * 1.42) / 1.5) * d
+    C_Fij[:, :, k] = ((CF[k] * 1.42) / 1.5) * d
 
-for k in K:
-    (f'For Aircraf {k} fuel cost is {C_Fij[k]}')
+# for k in K: -->waarom deze regels code
+#     (f'For Aircraf {k} fuel cost is {C_Fij[k]}')
 
-Ck_ij = np.zeros((ac, n, n))
+Ck_ij = np.zeros((n, n, ac))
 for k in K:
     for i in N:
         for j in N:
-            Ck_ij[k, i, j] = C[k] + C_Tij[k, i, j] + C_Fij[k, i, j]
+            Ck_ij[i, j, k] = C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]
             
 
 a = {}
@@ -496,7 +496,7 @@ for i in N:
             else:
                 a[i,j,k] = 0
 
-g = np.ones(n)    
+g = np.ones(n)
 g[hub_index] = 0 
 
 LF = 0.75                                                              # Loadfactor, given
@@ -523,22 +523,15 @@ def main():
 
     x = model.addVars(N, N, name="x", vtype=GRB.INTEGER, lb=0)
     w = model.addVars(N, N, name="w", vtype=GRB.INTEGER, lb=0)
-    z = model.addVars(K, N, N, name="z", vtype=GRB.INTEGER, lb=0)
+    z = model.addVars(N, N, K, name="z", vtype=GRB.INTEGER, lb=0)
     AC = model.addVars(K, name="AC", vtype=GRB.INTEGER, lb=0)
 
     #objective:
     
-    Objective_1B = quicksum((y[i, j] * d[i, j] * (x[i, j] + w[i, j])) for i in N for j in N) - quicksum(Ck_ij[k, i, j] * z[k, i, j] for k in K for i in N for j in N) - quicksum(cl[k] * AC[k] for k in K)
+    Objective_1B = quicksum((y[i, j] * d[i, j] * (x[i, j] + w[i, j])) for i in N for j in N) - quicksum(Ck_ij[i, j, k] * z[i, j, k] for k in K for i in N for j in N) - quicksum(cl[k] * AC[k] for k in K)
     
 
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
-    
-    # #nieuwe constrain die dwingt dat er altijd via de hub wordt gevlogen
-    # for i in N:
-    #     for j in N:
-    #         if i != hub_index and j != hub_index:
-    #             for k in K:
-    #                 model.addConstr(z[k, i, j] == 0, name=f"no_direct_{i}_{j}_{k}")
 
     # Constraints:
     #passengers smaller than demand
@@ -550,55 +543,77 @@ def main():
         for j in N:
             model.addConstr(w[i,j]<= q[i,j] * g[i] * g[j],name=f"transfer")
 
+    # #nieuwe constrain die dwingt dat er altijd via de hub wordt gevlogen (martijn)
+    # for i in N:
+    #     for j in N:
+    #         for k in K:
+    #             model.addConstr(z[i, j, k] * g[i] * g[j] == 0, name=f"via_hub_{i}_{j}_{k}")
+
+    # hub constr do 
+    for i in N:
+        for j in N:
+            if i != hub_index and j != hub_index:
+                for k in K:
+                    model.addConstr(z[i, j, k] == 0, name=f"hub_constr_{i}_{j}_{k}")
+
+
     #balance incomming and outgoing
     for i in N:
         for k in K:
-            lhs = quicksum(z[k, i, j] for j in N)
-            rhs = quicksum(z[k, j, i] for j in N)
+            lhs = quicksum(z[i, j, k]  for j in N)
+            rhs = quicksum(z[j, i, k]  for j in N)
             model.addConstr(lhs == rhs, name=f"return_constrain_{i}_{k}")
     
     # passengers smaller than amount of seats 
     for i in N:
         for j in N:
             lhs1 = x[i,j] + quicksum((w[i,m]*(1 - g[j])) for m in N) + quicksum((w[m,j]*(1 - g[i])) for m in N)
-            rhs1 = quicksum((z[k, i, j] * s[k] * LF) for k in K)
+            rhs1 = quicksum((z[i, j, k]  * s[k] * LF) for k in K)
             model.addConstr(lhs1 <= rhs1, name=f"cap_constraint_{i}_{j}")
 
-    #duration of flights
+    # #duration of flights basic
+    # for k in K:
+    #    lhs2 = quicksum( (((d[i, j] / v[k]) + TAT[k]) * z[i, j, k] ) for i in N for j in N)
+    #    rhs2 = (BT * AC[k])
+    #    model.addConstr(lhs2 <= rhs2)
+
+       #duration poging 200
     for k in K:
-       lhs2 = quicksum( (((d[i,j]/v[k]) + TAT[k]  ) * z[k, i, j]) for i in N for j in N)
-       rhs2 = (BT * AC[k])
-       model.addConstr(lhs2 <= rhs2)
+        lhs3 = quicksum((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - (g[i] * g[j] ))) * z[i, j, k]  for i in N for j in N) 
+        rhs3 = (BT * AC[k]) 
+        model.addConstr(lhs3 <= rhs3, name=f"duration_constrain_{k}")
 
     # range constrains
     for k in K:
         for i in N:
             for j in N:
-                model.addConstr(z[k, i, j] <= a[i, j, k], name=f"reach_{i}_{j}_{k}")
+                model.addConstr(z[i, j, k]  <= a[i, j, k], name=f"reach_{i}_{j}_{k}")
 
-    # #runway constraints
-    # for k in K:
-    #     for i in N:
-    #         for j in N:
-    #             model.addConstr(RAC[k] * z[k, i, j] <= RAP[i]* z[k, i, j], name=f'Runway_dep_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
+    #runway constraints
+    for k in K:
+        for i in N:
+            for j in N:
+                model.addConstr(RAC[k] * z[i, j, k] <= RAP[i]* z[i, j, k] , name=f'Runway_dep_{i}_{j}_{k}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
 
-    # for k in K:
-    #     for i in N:
-    #         for j in N:
-    #             model.addConstr(RAC[k] * z[k, i, j] <= RAP[j] * z[k, i, j], name=f'Runway_arr_{k}_{i}_{j}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
+    for k in K:
+        for i in N:
+            for j in N:
+                model.addConstr(RAC[k] * z[i, j, k]  <= RAP[j] * z[i, j, k] , name=f'Runway_arr_{i}_{j}_{k}') # heb z_ijk toegevoegd zodat er wel iets wordt gedaan met dat er een vliegtuig heen gaat
 
-    # #timeslot constraints
-    # for j in N:
-    #     model.addConstr(quicksum(z[k, i, j] for i in N for k in K) <= TS[j], name=f'Time_slots_{j}')
+    #timeslot constraints
+    for j in N:
+        model.addConstr(quicksum(z[i, j, k]  for i in N for k in K) <= TS[j], name=f'Time_slots_{j}')
     
   
 
 
     model.optimize()
-
+    model.write("Model_1B.sol")
+    model.write("Model_1B.lp")
     if model.status == GRB.OPTIMAL or model.status == GRB.TIME_LIMIT:
         totale_winst = model.ObjVal  
         print(f"Totaal winst: €{totale_winst:.2f}")
+        print(d)
 
         print("\nAantal benodigde vliegtuigen per type:")
         for k in K:
@@ -615,14 +630,14 @@ def main():
         for i in N:
             for j in N:
                 for k in K:
-                    if z[k,i,j].X > 0.5:   # threshold om integer rounding te vermijden
+                    if z[i, j, k].X > 0.5:   # threshold om integer rounding te vermijden
                         print(f"{airports[i]} → {airports[j]} met {df_aircraft.index[k]} "
-                            f"aantal vluchten: {z[k, i, j].X:.0f}")
+                            f"aantal vluchten: {z[i, j, k].X:.0f}")
                         
         print("\nVliegtijd per individueel vliegtuig:")
         for k in K:
             total_hours_k = sum(
-                ((d[i, j] / v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 -g[j]))) * z[k,i,j].X
+                ((d[i, j] / v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 -g[j]))) * z[i, j, k].X
                 for i in N for j in N)
 
             num_aircraft = AC[k].X
@@ -637,7 +652,7 @@ def main():
         print("Matrix unmet demand = demand – (w + x):\n")
         unmet = np.zeros(n)
         for j in N:
-            sum_z = sum(z[k,i,j].X for i in N for k in K)  # waarde van z na optimalisatie
+            sum_z = sum(z[i, j, k].X for i in N for k in K)  # waarde van z na optimalisatie
             unmet[j] = TS[j] - sum_z
             print(f"{airports[j]}: {unmet[j]:.0f}")
 
@@ -693,14 +708,14 @@ def main():
                         print(f"  term1 (d/v) = {term1}")
                         print(f"  term2 (TAT) = {term2}")
                         print(f"  term3 (TAT*0.5*(1-g)) = {term3}")
-                    elif z[k,i,j].X > 1e-6:
-                        print(f"Flight {i}->{j} contributes: duration_term = {duration_term:.2f}, z = {z[k,i,j].X}")
+                    elif z[i, j, k].X > 1e-6:
+                        print(f"Flight {i}->{j} contributes: duration_term = {duration_term:.2f}, z = {z[i, j, k].X}")
 
         print("Ck_ij shape:", Ck_ij.shape)
         print("z vars:", len(z))
         i,j,k = 0,1,2
         print("Ck_ij[k,i,j] =", Ck_ij[k,i,j])
-        print("z[i,j,k] =", z[i,j,k].X if model.status == GRB.OPTIMAL else "NA")
+        print("z[i,j,k] =", z[i, j, k].X if model.status == GRB.OPTIMAL else "NA")
 
 
 
