@@ -548,18 +548,18 @@ def main():
         for j in N:
             model.addConstr(w[i,j]<= q[i,j] * g[i] * g[j],name=f"transfer")
 
-    # #nieuwe constrain die dwingt dat er altijd via de hub wordt gevlogen (martijn)
-    # for i in N:
-    #     for j in N:
-    #         for k in K:
-    #             model.addConstr(z[i, j, k] * g[i] * g[j] == 0, name=f"via_hub_{i}_{j}_{k}")
-
-    # hub constr die dwingt dat er altijd via de hub wordt gevlogen (do)
+    #nieuwe constrain die dwingt dat er altijd via de hub wordt gevlogen (martijn)
     for i in N:
         for j in N:
-            if i != hub_index and j != hub_index:
-                for k in K:
-                    model.addConstr(z[i, j, k] == 0, name=f"hub_constr_{i}_{j}_{k}")
+            for k in K:
+                model.addConstr(z[i, j, k] * g[i] * g[j] == 0, name=f"via_hub_{i}_{j}_{k}")
+
+    # # hub constr die dwingt dat er altijd via de hub wordt gevlogen (do)
+    # for i in N:
+    #     for j in N:
+    #         if i != hub_index and j != hub_index and i != j:
+    #             for k in K:
+    #                 model.addConstr(z[i, j, k] == 0, name=f"hub_constr_{i}_{j}_{k}")
 
 
     #balance incomming and outgoing
@@ -590,17 +590,17 @@ def main():
     #    rhs2 = (BT * AC[k])
     #    model.addConstr(lhs2 <= rhs2)
 
-    #    #duration poging 200 --> met haakjes om de totale som van de tijd * z_ijk geeft alles 0, maar moet wel zo denk ik
-    # for k in K:
-    #     lhs3 = quicksum(((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - (g[i] * g[j] )))) * z[i, j, k]  for i in N for j in N) 
-    #     rhs3 = (BT * AC[k]) 
-    #     model.addConstr(lhs3 <= rhs3, name=f"duration_constrain_{k}")
-
-           #duration poging 300 --> geen haakjes om de totale som van de tijd * z_ijk, dit klopt eigenlijk niet, maar zo krijg je wel een oplossing
+    #duration poging 200 --> met haakjes om de totale som van de tijd * z_ijk geeft alles 0, maar moet wel zo denk ik
     for k in K:
-        lhs3 = quicksum((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - (g[i] * g[j] ))) * z[i, j, k]  for i in N for j in N) 
+        lhs3 = quicksum(((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - g[j] ))) * z[i, j, k]  for i in N for j in N) 
         rhs3 = (BT * AC[k]) 
         model.addConstr(lhs3 <= rhs3, name=f"duration_constrain_{k}")
+
+    # #duration poging 300 --> geen haakjes om de totale som van de tijd * z_ijk, dit klopt eigenlijk niet, maar zo krijg je wel een oplossing
+    # for k in K:
+    #     lhs3 = quicksum((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - (g[i] * g[j] ))) * z[i, j, k]  for i in N for j in N) 
+    #     rhs3 = (BT * AC[k]) 
+    #     model.addConstr(lhs3 <= rhs3, name=f"duration_constrain_{k}")
 
 
     # range constrains
@@ -623,8 +623,7 @@ def main():
     #timeslot constraints
     for j in N:
         model.addConstr(quicksum(z[i, j, k]  for i in N for k in K) <= TS[j], name=f'Time_slots_{j}')
-    
-  
+ 
 
 
     model.optimize()
@@ -742,4 +741,3 @@ def main():
         print("No optimal solution found")
 
 main()
-   
