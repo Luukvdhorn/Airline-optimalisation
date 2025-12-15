@@ -420,7 +420,7 @@ y = np.zeros((n, n))
 for i in N:                                 #YIELD
     for j in N:
         if d[i, j] > 0:
-            y[i, j] = 5.9 * d[i, j]**(-0.76) + 0.043
+            y[i, j] = (5.9 * d[i, j]**(-0.76) + 0.043)
         else:
             y[i, j] = 0   
 
@@ -482,7 +482,7 @@ Ck_ij = np.zeros((n, n, ac))
 for k in K:
     for i in N:
         for j in N:
-            Ck_ij[i, j, k] = C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]
+            Ck_ij[i, j, k] = (C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]) * 0.7
             
 
 a = {}
@@ -517,7 +517,7 @@ from gurobipy import Model, GRB, quicksum
 def main():
     model = Model("Model_1B")
     model.write("network_fleet_development.lp")
-    model.setParam('TimeLimit', 120)
+    model.setParam('TimeLimit', 10)
 
     x = model.addVars(N, N, name="x", vtype=GRB.INTEGER, lb=0)
     w = model.addVars(N, N, name="w", vtype=GRB.INTEGER, lb=0)
@@ -592,7 +592,7 @@ def main():
 
     #duration poging 200 --> met haakjes om de totale som van de tijd * z_ijk geeft alles 0, maar moet wel zo denk ik
     for k in K:
-        lhs3 = quicksum(((d[i,j]/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - g[j] ))) * z[i, j, k]  for i in N for j in N) 
+        lhs3 = quicksum((((d[i, hub_index] + d[hub_index, j])/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 - g[j] ))) * z[i, j, k]  for i in N for j in N) 
         rhs3 = (BT * AC[k]) 
         model.addConstr(lhs3 <= rhs3, name=f"duration_constrain_{k}")
 
@@ -655,7 +655,7 @@ def main():
         print("\nVliegtijd per individueel vliegtuig:")
         for k in K:
             total_hours_k = sum(
-                ((d[i, j] / v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 -g[j]))) * z[i, j, k].X
+                (((d[i, hub_index] + d[hub_index, j])/ v[k]) + TAT[k] + (TAT[k] * 0.5 * (1 -g[j]))) * z[i, j, k].X
                 for i in N for j in N)
 
             num_aircraft = AC[k].X
