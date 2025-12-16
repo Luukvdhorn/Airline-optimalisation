@@ -8,64 +8,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import statsmodels.api as sm
 
-import sys
-print(sys.executable)
-
+#IMPORT ALL THE EXCEL FILES FOR ASSIGNMENT 1A
 
 wb = load_workbook("pop.xlsx", data_only=True)
 ws = wb["General"]
-
-population_2021 = []
-gdp_2021 = []
-
-population_2024 = []
-gdp_2024 = []
-
-row = 4  
-while True:
-    city = ws.cell(row=row, column=1).value          # kolom A
-    pop2021 = ws.cell(row=row, column=2).value       # kolom B
-
-    if city is None:
-        break
-
-    population_2021.append((city, pop2021))
-    row += 1
-
-row=4
-
-while True:
-    city = ws.cell(row=row, column=1).value          # kolom A
-    pop2024 = ws.cell(row=row, column=3).value       # kolom C
-
-    if city is None:
-        break
-
-    population_2024.append((city, pop2024))
-    row += 1
-
-row = 4  
-
-while True:
-    country = ws.cell(row=row, column=5).value       # kolom E
-    gdp2021 = ws.cell(row=row, column=6).value       # kolom F
-
-    if country is None:
-        break  
-    gdp_2021.append((country, gdp2021))
-    row += 1
-
-row = 4
-
-while True:
-    country = ws.cell(row=row, column=5).value       # kolom E
-    gdp2024 = ws.cell(row=row, column=7).value       # kolom G
-
-    if country is None:
-        break  
-    gdp_2024.append((country, gdp2024))
-    row += 1
-
 
 wb_codes = load_workbook("Airport_names.xlsx", data_only=True)
 ws_codes = wb_codes.active
@@ -74,7 +20,7 @@ city_to_icao = {}
 country_to_icao = {}
 
 row = 1
-while True:
+while True:                                                             #Give everything a good name and couple them
     city = ws_codes.cell(row=row, column=1).value
     country = ws_codes.cell(row=row, column=2).value
     icao = ws_codes.cell(row=row, column=3).value
@@ -93,6 +39,9 @@ gdp_2021_dict = {}
 gdp_2024_dict = {}
 
 row = 4
+
+#GET THE RIGHT INFORMATION FROM THE EXCELFILES
+
 while True:
     city = ws.cell(row=row, column=1).value        # kolom A
     pop2021 = ws.cell(row=row, column=2).value     # kolom B
@@ -112,21 +61,10 @@ while True:
 
     row += 1
 
-# print("Population:")
-# print(population_2021_dict)
-
-# print("GDP 2021:")
-# print(gdp_2021_dict)
-
-# print("Population 2024:")
-# print(population_2024_dict)
-
-# print("GDP 2024:")
-# print(gdp_2024_dict)
-
 wb = load_workbook("DemandGroup40.xlsx", data_only=True)
 ws = wb.active
 
+#INFORMATION FOR ASSIGNMENT 1B
 icao_row = 5    
 lat_row = 6    
 lon_row = 7    
@@ -135,8 +73,10 @@ runway_row = 8
 slots_row  = 9
 runways = []
 slots = []
-hub_index = 2  # Amsterdam
+hub_index = 2                                   # Amsterdam
 
+RE = 6371.0                                     # Radius Earth
+f = 1.42                                        # Fuel cost constant 
 
 airports = []
 latitudes = []
@@ -161,9 +101,7 @@ while True:
         slots.append(float(slot))
     col += 1
 
-
-
-RE = 6371.0 
+#DISTANCE FORMULA
 
 def distance(phi_i, lam_i, phi_j, lam_j):
     phi_i, phi_j = np.radians(phi_i), np.radians(phi_j)
@@ -180,14 +118,11 @@ for i in range(n):
         dij[i, j] = distance(latitudes[i], longitudes[i], latitudes[j], longitudes[j])
 
 
-# print("Afstandsmatrix (km):")
-# print("\t" + "\t".join(airports))
-# for i, row in enumerate(dij):
-#     print(airports[i], "\t" + "\t".join(f"{val:.2f}" for val in row))
-
-
 demand_start_row = icao_row + 8 
 demand_start_col = start_col 
+
+
+#BUILDING UP D (IJ)
 
 n = len(airports)
 D = np.zeros((n, n))
@@ -200,27 +135,19 @@ for i in range(n):
         except:
             D[i, j] = 0
 
-# print("Demandmatrix 2021 (week):")
-# print("\t" + "\t".join(airports))
-# for i in range(n):
-#     print(airports[i], "\t" + "\t".join(f"{D[i,j]:.0f}" for j in range(n)))
-
-# Determning B1, B2, B3 and k
-f = 1.42   # fuel cost constant from assignment
-
 n = len(airports)
 rows = []
 
 for i in range(n):        
     for j in range(n):
         if i == j:
-            continue                    # If orgin and destionation is the same, go on
+            continue                            # If orgin and destionation is the same, go on
 
         Dij = D[i, j]
         if Dij <= 0:
-            continue                    # It there is no demand, go on
+            continue                            # It there is no demand, go on
 
-        i_icao = airports[i]            #Collectiong ICAO code
+        i_icao = airports[i]                    #Collectiong ICAO code
         j_icao = airports[j]
 
         row = {
@@ -232,45 +159,47 @@ for i in range(n):
         rows.append(row)
 
 df = pd.DataFrame(rows)
-# print(df)
 
-# --- LOGS ---
-df['lnD']    = np.log(df['D'])                  #logarithm to lineariz the model, dat doe je door ln van alles te nemen heeft google mij verteld
+#LINEAR REGRESSION
+
+df['lnD']    = np.log(df['D'])                  
 df['ln_pop'] = np.log(df['pop'])
 df['ln_gdp'] = np.log(df['gdp'])
 df['ln_fd']  = np.log(df['fd'])
 
-# --- OLS REGRESSIE ---
+
 X = df[['ln_pop', 'ln_gdp', 'ln_fd']]           # Independent variables
 X = sm.add_constant(X)                          # This creates ln(k)
 y = df['lnD']                                   # Dependent variable
 
 model = sm.OLS(y, X).fit()                      # Ordinary least squares
-# print(model.summary())
+#print(model.summary())
 
-# --- PARAMETERS ---
-a = model.params['const']            # ln(k)
-b1 = model.params['ln_pop']          # Creating b1
+
+a = model.params['const']            
+b1 = model.params['ln_pop']         
 b2 = model.params['ln_gdp']
 
-beta3 = model.params['ln_fd']        # = -b3 (afstand in noemer)
-b3 = -beta3                          # Because in function it is in the denominator
+beta3 = model.params['ln_fd']        
+b3 = -beta3                          
 
-k1 = np.exp(a)                       # Making k again after it is a ln()
+k1 = np.exp(a)                       
 
-# print("\n--- GRAVITY MODEL PARAMETERS ---")
-# print(f"k  = {k}")
+
+# print(f"k1  = {k1}")                          #printing the k, b1, b2,b3 values
 # print(f"b1 = {b1:.4f}")
 # print(f"b2 = {b2:.4f}")
 # print(f"b3 = {b3:.4f}")
 
-# Maak een lege matrix voor voorspelde demand
+
+#CREATE PREDICITION 2021
+
 D_pred = np.zeros((n, n))
 
 for i in range(n):
     for j in range(n):
         if i == j:
-            D_pred[i, j] = 0  # geen vraag van een stad naar zichzelf
+            D_pred[i, j] = 0  
             continue
         i_icao = airports[i]
         j_icao = airports[j]
@@ -281,58 +210,54 @@ for i in range(n):
 
         D_pred[i, j] = k1 * (pop_product**b1) * (gdp_product**b2) * ((fd_ij)**(beta3))
 
-# print("Voorspelde demand (gravity model):")
-# print("\t" + "\t".join(airports))
-# for i in range(n):
-#     print(airports[i], "\t" + "\t".join(f"{D_pred[i,j]:.0f}" for j in range(n)))
+
+# DIFFERENCE MATRIX
+D_diff = D_pred - D  
 
 
-# Verschilmatrix
-D_diff = D_pred - D  # absoluut verschil
-
-# print("Absoluut verschil (voorspeld - werkelijke vraag):")
-# print("\t" + "\t".join(airports))
-# for i in range(n):
-#     print(airports[i], "\t" + "\t".join(f"{D_diff[i,j]:.0f}" for j in range(n)))
-
-# POP EN GDP VOORSPELLEN 2026
+# POP EN GDP 2021 AND 2024 FOR GROWFACTORS
 population_2026_dict = {}
+pop_g_list = []                                         #Average pop g list
+
 for icao in population_2021_dict:
     pop_2021 = population_2021_dict[icao]
     pop_2024 = population_2024_dict[icao]
 
-    # jaarlijkse groeivoet
-    g = (pop_2024 / pop_2021)**(1/3)  
-
-    # voorspelling voor 2026
+    g = (pop_2024 / pop_2021)**(1/3)                   #Annual growth
+    pop_g_list.append(g)
     pop_2026 = pop_2024 * (g)**2
-    population_2026_dict[icao] = pop_2026
+    population_2026_dict[icao] = pop_2026              #Prediction 2026
+
+
+
 
 gdp_2026_dict = {}
+gdp_g_list = []
+
 for icao in gdp_2021_dict:
     gdp_2021 = gdp_2021_dict[icao]
     gdp_2024 = gdp_2024_dict[icao]
 
-    # Grow factor, in 3 years de difference is grow
     g = (gdp_2024 / gdp_2021)**(1/3)
-
-    # 2026 is amount of 2024 times the grow factor to the power of the difference in years
+    gdp_g_list.append(g)
+    
     gdp_2026 = gdp_2024 * (g)**2
     gdp_2026_dict[icao] = gdp_2026
 
-# print(f'Population in 2026')
-# print(gdp_2026_dict)
 
-# print(f'GDP in 2026')
-# print(population_2026_dict)
+avg_gdp_g = sum(gdp_g_list) / len(gdp_g_list)
+#print(f"Gemiddelde jaarlijkse groeifactor GDP: {avg_gdp_g:.4f}")
 
-# Demand prediction 2026
+avg_pop_g = sum(pop_g_list) / len(pop_g_list)
+#print(f"Gemiddelde jaarlijkse groeifactor populatie: {avg_pop_g:.4f}")
+
+#PREDICTION 2026
 D_pred_26 = np.zeros((n, n))
 
 for i in range(n):
     for j in range(n):
         if i == j:
-            D_pred_26[i, j] = 0  # geen vraag van een stad naar zichzelf
+            D_pred_26[i, j] = 0  
             continue
         i_icao = airports[i]
         j_icao = airports[j]
@@ -343,19 +268,56 @@ for i in range(n):
 
         D_pred_26[i, j] = k1 * (pop_product_26**b1) * (gdp_product_26**b2) * ((fd_ij)**(beta3))
 
-# print("Voorspelde demand 2026 (gravity model):")
-# print("\t" + "\t".join(airports))
-# for i in range(n):
-#     print(airports[i], "\t" + "\t".join(f"{D_pred_26[i,j]:.0f}" for j in range(n)))
 
-# Voorspelde ln(D) met het model
+D = np.array(D_pred_26)
+
 df['lnD_pred'] = model.predict(X)
 
-# Omzetten naar originele schaal
 df['D_pred'] = np.exp(df['lnD_pred'])
 df['D_actual'] = np.exp(df['lnD'])
 
-# # Plot: Werkelijk vs Voorspeld D
+x = df['D_actual']
+y = df['D_pred']
+
+
+
+#PLOTS AND PRINTSTATEMENTS
+
+# fig, ax = plt.subplots(figsize=(14, 12))
+# im = ax.imshow(D, cmap="Greens")
+
+# ax.set_xticks(np.arange(len(airports)))
+# ax.set_yticks(np.arange(len(airports)))
+# ax.set_xticklabels(airports)
+# ax.set_yticklabels(airports)
+
+# ax.tick_params(top=False, bottom=True, labeltop=False, labelbottom=True)
+
+# plt.setp(
+#     ax.get_xticklabels(),
+#     rotation=90,
+#     ha="center",
+#     va="top"
+# )
+
+
+# for i in range(len(airports)):
+#     for j in range(len(airports)):
+#         if D[i, j] > 0: 
+#                 ax.text(
+#                 j, i, f"{D[i, j]:.0f}",
+#                 ha="center", va="center",
+#                 fontsize=8,
+#                 color="black")
+
+# ax.set_title("Estimated demand 2026")
+
+#plt.tight_layout()
+#plt.show()
+
+
+
+# Plot: Werkelijk vs Voorspeld D
 # plt.figure(figsize=(8,6))
 # plt.scatter(df['D_actual'], df['D_pred'], color='blue', alpha=0.6, label='Data points')
 # plt.plot([0, df['D_actual'].max()], [0, df['D_actual'].max()],
@@ -366,6 +328,10 @@ df['D_actual'] = np.exp(df['lnD'])
 # plt.legend()
 # plt.grid(True)
 # plt.show()
+
+# Richtingscoëfficiënt (slope) berekenen
+#slope, intercept = np.polyfit(x, y, 1)
+#print(f"Richtingscoëfficiënt (slope): {slope:.4f}")
 
 
 ### Implementatie van mathematical model ###
@@ -402,7 +368,7 @@ print(df_aircraft)
 # Data - Sets
 N = range(len(airports))                    # Set of airports; i, j in N
 K = range(len(df_aircraft))                 # Set of aircrafts; k in K
-ac = len(df_aircraft)                        # Total amount of aircrafts
+ac = len(df_aircraft)                       # Total amount of aircrafts
 
 # Data - parameters
 q = np.zeros((n, n))                        # Demand between orgin i and destination j
@@ -475,8 +441,6 @@ C_Fij = np.zeros((n, n, ac))
 for k in K:
     C_Fij[:, :, k] = ((CF[k] * 1.42) / 1.5) * d
 
-# for k in K: -->waarom deze regels code
-#     (f'For Aircraf {k} fuel cost is {C_Fij[k]}')
 
 Ck_ij = np.zeros((n, n, ac))
 for k in K:
@@ -510,8 +474,6 @@ for k in K:
     TAT[k] = df_aircraft['Average TAT [mins]'][k]/60
 
 
-#hier moeten de laaste paar parameters nog komen. Ik ga alvast verder met het model
-
 from gurobipy import Model, GRB, quicksum
 
 def main():
@@ -531,13 +493,7 @@ def main():
 
     model.setObjective(Objective_1B, GRB.MAXIMIZE)
 
-    # Constraints:
-    # model.addConstr(quicksum(x[i, j] >= 1 for i in N for j in N), name="at_least_one_flight")
-    # model.addConstr(quicksum(w[i, j] >= 1 for i in N for j in N), name="at_least_one_flight")
-    # model.addConstr(quicksum(z[i, j, k] >= 1 for i in N for j in N for k in K), name="at_least_one_flight")
-    # model.addConstr(quicksum(AC[k] >= 1 for k in K), name="at_least_one_aircraft")
-
-
+    
 
     #passengers smaller than demand
     for i in N:
@@ -643,14 +599,19 @@ def main():
         transfer_passagiers = sum(w[i, j].X for i in N for j in N)
         print(f'\nAantal passagiers die transfer hebben op de hub {transfer_passagiers}')
 
-        print("\nGevlogen routes (z[i,j,k] > 0):")
+        print("\nGevlogen routes (z[i,j,k] > 0) met totaal aantal passagiers:")
+
        
+
         for i in N:
             for j in N:
                 for k in K:
                     if z[i, j, k].X > 0.5:   # threshold om integer rounding te vermijden
+                        total_passengers = z[i, j, k].X * s[k] * LF
                         print(f"{airports[i]} → {airports[j]} met {df_aircraft.index[k]} "
-                            f"aantal vluchten: {z[i, j, k].X:.0f}")
+                            f"aantal vluchten: {z[i, j, k].X:.0f}, "
+                            f"totaal passagiers: {total_passengers:.0f}")
+
                         
         print("\nVliegtijd per individueel vliegtuig:")
         for k in K:
@@ -667,7 +628,7 @@ def main():
                 print(f"Type {k}: geen vliegtuigen gebruikt")
 
 
-        print("Matrix unmet demand = demand – (w + x):\n")
+        print("Matrix unmet demand = demand  (w + x):\n")
         unmet = np.zeros(n)
         for j in N:
             sum_z = sum(z[i, j, k].X for i in N for k in K)  # waarde van z na optimalisatie
