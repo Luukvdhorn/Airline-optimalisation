@@ -175,7 +175,7 @@ import numpy as np
 # DATA INLADEN
 # =========================
 
-wb_data = load_workbook("data_ex2.xlsx", data_only=True)
+wb_data = load_workbook("Group_40.xlsx", data_only=True)
 
 df_flights = pd.DataFrame(wb_data["Flights"].values)
 df_flights.columns = df_flights.iloc[0]
@@ -242,6 +242,7 @@ for p, row in df_itineraries.iterrows():
 for l in L:
     delta_lp[(l, p_fict)] = 0
 
+
 # =========================
 # KEYPATH PARAMETERS
 # =========================
@@ -287,33 +288,23 @@ def main():
     # -------------------------
     # OBJECTIVE FUNCTION
     # -------------------------
+    model.setObjective(quicksum(fare[p] * t[p, p_fict] for p in P_real), GRB.MINIMIZE)
 
-    model.setObjective(
-        quicksum(fare[p] * t[p, p_fict] for p in P_real),
-        GRB.MINIMIZE
-    )
 
-    # -------------------------
-    # CAPACITY CONSTRAINTS
-    # -------------------------
-
+    # Capacity constraints
     cap_constr = {}
     for l in L:
         cap_constr[l] = model.addConstr(
-            quicksum(delta_lp.get((l, p), 0) * t[p, p_fict] for p in P_real)
-            >= Q[l] - CAP[l],
+            quicksum(delta_lp.get((l, p), 0) * t[p, p_fict] for p in P_real) >= Q[l] - CAP[l],
             name=f"cap_{l}"
         )
 
-    # -------------------------
-    # DEMAND CONSTRAINTS
-    # -------------------------
 
+    # Demand constraints
     demand_constr = {}
     for p in P_real:
-        demand_constr[p] = model.addConstr(t[p, p_fict] <= D[p],
-            name=f"demand_{p}"
-        )
+        demand_constr[p] = model.addConstr(t[p, p_fict] <= D[p], name=f"demand_{p}")
+
 
     # -------------------------
     # SOLVE
@@ -331,9 +322,6 @@ def main():
 
     def sum_pi_over_itinerary(p):
         return sum(pi[l] for l in L if delta_lp.get((l, p), 0) == 1)
-
-
-
 
     # -------------------------
     # OUTPUT
@@ -358,24 +346,24 @@ def main():
         print("\nPricing problem – slack (reduced costs):")
 
         for _, row in df_recapture.iterrows():
-
             p = int(row["From Itinerary"])
             r = int(row["To Itinerary"])
-            b_rp = float(row["Recapture Rate"])
+            b_rp = float(row["Recapture Rate"])  # br^p
 
-            # modified fares (slide 32)
-            mod_fare_p = fare[p] - sum_pi_over_itinerary(p)
-            mod_fare_r = fare[r] - sum_pi_over_itinerary(r)
+            slack = 0.0
+            for l in L:
+                delta_lp_val = delta_lp.get((l, p), 0)
+                delta_lr_val = delta_lp.get((l, r), 0)
+                slack += (delta_lp_val - delta_lr_val * b_rp) * pi[l]
 
-            # reduced cost / slack
-            slack = mod_fare_p - b_rp * mod_fare_r - sigma[p]
-            if slack < 0:
+            slack += sigma[p] - (fare[p] - b_rp * fare[r])
+
+            if slack < -0.0000001:
                 print(f"c'[{r},{p}] = {slack:.2f}")
-
-                if slack < 0:
-                    print(f"  -> column t[{r},{p}] PRICES OUT (ADD)")
 
     else:
         print("No feasible solution found.")
 
 main()
+
+print(P)

@@ -283,55 +283,55 @@ y = df['D_pred']
 
 #PLOTS AND PRINTSTATEMENTS
 
-# fig, ax = plt.subplots(figsize=(14, 12))
-# im = ax.imshow(D, cmap="Greens")
+fig, ax = plt.subplots(figsize=(14, 12))
+im = ax.imshow(D, cmap="Greens")
 
-# ax.set_xticks(np.arange(len(airports)))
-# ax.set_yticks(np.arange(len(airports)))
-# ax.set_xticklabels(airports)
-# ax.set_yticklabels(airports)
+ax.set_xticks(np.arange(len(airports)))
+ax.set_yticks(np.arange(len(airports)))
+ax.set_xticklabels(airports)
+ax.set_yticklabels(airports)
 
-# ax.tick_params(top=False, bottom=True, labeltop=False, labelbottom=True)
+ax.tick_params(top=False, bottom=True, labeltop=False, labelbottom=True)
 
-# plt.setp(
-#     ax.get_xticklabels(),
-#     rotation=90,
-#     ha="center",
-#     va="top"
-# )
+plt.setp(
+    ax.get_xticklabels(),
+    rotation=90,
+    ha="center",
+    va="top"
+)
 
 
-# for i in range(len(airports)):
-#     for j in range(len(airports)):
-#         if D[i, j] > 0: 
-#                 ax.text(
-#                 j, i, f"{D[i, j]:.0f}",
-#                 ha="center", va="center",
-#                 fontsize=8,
-#                 color="black")
+for i in range(len(airports)):
+    for j in range(len(airports)):
+        if D[i, j] > 0: 
+                ax.text(
+                j, i, f"{D[i, j]:.0f}",
+                ha="center", va="center",
+                fontsize=8,
+                color="black")
 
-# ax.set_title("Estimated demand 2026")
+ax.set_title("Estimated demand 2026")
 
-#plt.tight_layout()
-#plt.show()
+plt.tight_layout()
+plt.show()
 
 
 
 # Plot: Werkelijk vs Voorspeld D
-# plt.figure(figsize=(8,6))
-# plt.scatter(df['D_actual'], df['D_pred'], color='blue', alpha=0.6, label='Data points')
-# plt.plot([0, df['D_actual'].max()], [0, df['D_actual'].max()],
-#          color='red', lw=2, label='Regression line')
-# plt.xlabel('Given demand')
-# plt.ylabel('Predicted demand')
-# plt.title('Given vs. predicted demand 2021')
-# plt.legend()
-# plt.grid(True)
-# plt.show()
+plt.figure(figsize=(8,6))
+plt.scatter(df['D_actual'], df['D_pred'], color='blue', alpha=0.6, label='Data points')
+plt.plot([0, df['D_actual'].max()], [0, df['D_actual'].max()],
+         color='red', lw=2, label='Regression line')
+plt.xlabel('Given demand')
+plt.ylabel('Predicted demand')
+plt.title('Given vs. predicted demand 2021')
+plt.legend()
+plt.grid(True)
+plt.show()
 
 # Richtingscoëfficiënt (slope) berekenen
-#slope, intercept = np.polyfit(x, y, 1)
-#print(f"Richtingscoëfficiënt (slope): {slope:.4f}")
+slope, intercept = np.polyfit(x, y, 1)
+print(f"Richtingscoëfficiënt (slope): {slope:.4f}")
 
 
 
