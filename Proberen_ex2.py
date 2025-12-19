@@ -210,6 +210,38 @@ def column_generation(max_iter=20):
     print(f"Total columns in final RMP: {len(existing_cols)}")
     print(f"Final objective value: {model.objVal:.2f}")
 
+    # =========================
+    # EXTRA OUTPUT REQUESTED
+    # =========================
+
+    print("\n================ ADDITIONAL RESULTS ================")
+
+    # 1️⃣ Optimal airline cost
+    print(f"Optimal airline cost: {model.objVal:.2f}")
+
+    # 2️⃣ Total number of passengers spilled
+    total_spilled = sum(
+        t[(p, p_fict)].X for p in P_real if (p, p_fict) in t
+    )
+    print(f"Total number of passengers spilled: {total_spilled:.2f}")
+
+    # 3️⃣ Optimal decision variables for first 5 passenger itineraries
+    print("\nOptimal decision variables (first 5 itineraries):")
+    for p in range(min(5, len(P_real))):
+        printed = False
+        for r in P:
+            if (p, r) in t and abs(t[(p, r)].X) > 1e-6:
+                print(f"  t[{p},{r}] = {t[(p, r)].X:.2f}")
+                printed = True
+        if not printed:
+            print(f"  Itinerary {p}: no reallocation (all zero)")
+
+    # 4️⃣ Optimal dual variables for first 5 flights
+    print("\nOptimal dual variables (first 5 flights):")
+    for i in range(min(5, len(L))):
+        print(f"  Flight {i}: π = {cap[i].Pi:.2f}")
+
+
 
 
 # =====================================================
