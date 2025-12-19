@@ -1,162 +1,146 @@
-from gurobipy import * 
-from openpyxl import * 
-import openpyxl
-from time import *
-import numpy as np
-import math
-import matplotlib.pyplot as plt
-import pandas as pd
-import statsmodels.api as sm
-
 import pandas as pd
 import numpy as np
 from openpyxl import load_workbook
-
-
-# DATA INLADEN
-wb_data = load_workbook("Group_40.xlsx", data_only=True)
-
-flights_sheet = wb_data["Flights"]
-itineraries_sheet = wb_data["Itineraries"]
-recapture_sheet = wb_data["Recapture"]
-
-# Zet sheets om naar DataFrames
-df_flights = pd.DataFrame(flights_sheet.values)
-df_flights.columns = df_flights.iloc[0]
-df_flights = df_flights.iloc[1:].reset_index(drop=True)
-
-df_itineraries = pd.DataFrame(itineraries_sheet.values)
-df_itineraries.columns = df_itineraries.iloc[0]
-df_itineraries = df_itineraries.iloc[1:].reset_index(drop=True)
-
-df_recapture = pd.DataFrame(recapture_sheet.values)
-df_recapture.columns = df_recapture.iloc[0]
-df_recapture = df_recapture.iloc[1:].reset_index(drop=True)
-
-
-# SETS
-L = range(len(df_flights))        # flights
-P = range(len(df_itineraries))    # itineraries
-
-# Pp: mogelijke recapture-itineraries per p
-Pp = {p: set() for p in P}
-for _, row in df_recapture.iterrows():
-    p = int(row["From Itinerary"])
-    r = int(row["To Itinerary"])
-    Pp[p].add(r)
-
-
-# PARAMETERS
-
-# fare_p
-fare = np.zeros(len(P))
-for p in P:
-    fare[p] = float(df_itineraries.loc[p, "Price [EUR]"])
-
-# Demand_p
-D = np.zeros(len(P))
-for p in P:
-    D[p] = float(df_itineraries.loc[p, "Demand"])
-
-# CAP_l
-CAP = np.zeros(len(L))
-for l in L:
-    CAP[l] = float(df_flights.loc[l, "Capacity"])
-
-
-# b_p^r  (recapture rates)
-b_pr = {}
-for _, row in df_recapture.iterrows():
-    p = int(row["From Itinerary"])
-    r = int(row["To Itinerary"])
-    b_pr[(p, r)] = float(row["Recapture Rate"])
-
-
-# Maak mapping van flight code naar index l
-flight_code_to_id = {df_flights.loc[l, 'Flight No.']: l for l in L}
-
-# delta_lp = 1 als flight l in itinerary p zit
-delta_lp = {}
-
-for p, row in df_itineraries.iterrows():
-
-    # Flight 1 (altijd aanwezig)
-    code1 = row['Flight 1']
-    if pd.notna(code1):
-        l = flight_code_to_id[code1]
-        delta_lp[(l, p)] = 1
-
-    # Flight 2 (optioneel)
-    code2 = row['Flight 2']
-    if pd.notna(code2):
-        l = flight_code_to_id[code2]
-        delta_lp[(l, p)] = 1
-
-#---------------------------
-#Parameters keypath 
-
-Q = {}
-for l in L:
-    Q[l] = quicksum(delta_lp.get((l, p), 0) * D[p] for p in P)
-
-    
-# CONTROLE
-
 from gurobipy import Model, GRB, quicksum
 
-def main():
-    model = Model("Keypath_Formulation")
+def load_data(fname="Group_40.xlsx"):
+    wb = load_workbook(fname, data_only=True)
+    df_flights     = pd.DataFrame(wb["Flights"].values)
+    df_itineraries = pd.DataFrame(wb["Itineraries"].values)
+    df_recapture   = pd.DataFrame(wb["Recapture"].values)
+
+    # Hoofding rijen
+    df_flights.columns     = df_flights.iloc[0];     df_flights     = df_flights.iloc[1:].reset_index(drop=True)
+    df_itineraries.columns = df_itineraries.iloc[0]; df_itineraries = df_itineraries.iloc[1:].reset_index(drop=True)
+    df_recapture.columns   = df_recapture.iloc[0];   df_recapture   = df_recapture.iloc[1:].reset_index(drop=True)
+
+    return df_flights, df_itineraries, df_recapture
+
+def build_model(df_flights, df_itineraries, df_recapture):
+    # Sets
+    L = list(range(len(df_flights)))      # alle flights
+    P = list(range(len(df_itineraries)))  # alle originele itineraries
+    P0 = len(P)                           # index van de fictieve spill‐itinerary
+    P_full = P + [P0]
+
+    # Parameters
+    # capacity per flight
+    CAP = { l: float(df_flights.loc[l, "Capacity"]) for l in L }
+
+    # fare[p] en Demand D[p]
+    fare = { p: float(df_itineraries.loc[p, "Price [EUR]"]) for p in P }
+    D    = { p: float(df_itineraries.loc[p, "Demand"])      for p in P }
+
+    # dummy: spill‐itinerary krijgt fare=0, grote vraag D
+    fare[P0] = 0.0
+    D[P0]    = sum(D[p] for p in P)  # of een ander groot getal
+
+    # recapture‐rates b_pr
+    b_pr = {}
+    for _, row in df_recapture.iterrows():
+        p = int(row["From Itinerary"])
+        r = int(row["To Itinerary"])
+        b_pr[(p,r)] = float(row["Recapture Rate"])
+
+    # voeg self‐loops en spill‐optie p->P0 toe
+    for p in P:
+        b_pr[(p,p)] = 1.0        # self‐loop
+        b_pr[(p,P0)] = 1.0       # spill naar P0
+
+    # recapture‐sets Pp[p]
+    Pp = { p: set() for p in P_full }
+    # init met alle (p->r) uit Excel
+    for (p,r), rate in b_pr.items():
+        if p!=P0 and (r!=p or r!=P0):
+            Pp[p].add(r)
+    # self‐loops & spill
+    for p in P:
+        Pp[p].add(p)
+        Pp[p].add(P0)
+    Pp[P0] = set()  # spill heeft geen uitgaande recapture
+
+    # δ_lp = 1 als flight l in itinerary p zit
+    # maak flight_code->index map
+    flight_code_to_id = { df_flights.loc[l,"Flight No."] : l for l in L }
+    delta_lp = {}
+    for p, row in df_itineraries.iterrows():
+        for col in ["Flight 1", "Flight 2"]:
+            code = row[col]
+            if pd.notna(code):
+                l = flight_code_to_id[code]
+                delta_lp[(l,p)] = 1
+
+    # Q[l] = oorspronkelijke (unconstrained) vraag op vlucht l
+    Q = { l: quicksum(delta_lp.get((l,p),0) * D[p] for p in P) for l in L }
+
+    # --- Build Gurobi model ---
+    model = Model("Keypath_Mixflow")
     model.setParam("TimeLimit", 300)
 
-    # DECISION VARIABLES Keypath
-    t = model.addVars(P, P, lb=0, vtype=GRB.INTEGER, name="t")
+    # Decision Variables: t[p,r] ≥ 0 continuous (of integer)
+    t = model.addVars(
+        [(p,r) for p in P_full for r in Pp[p]],
+        lb=0, vtype=GRB.INTEGER, name="t"
+    )
 
-    # OBJECTIVE FUNCTION
-    model.setObjective(quicksum((fare[p] - b_pr.get((p, r), 0) * fare[r]) * t[p, r] for p in P for r in Pp),
-        GRB.MINIMIZE)
-    
+    # Objective: min ∑ₚ∈P ∑ᵣ∈Pp[p] (fare[p] − b_pr[p,r]*fare[r]) * t[p,r]
+    obj = quicksum(
+        (fare[p] - b_pr[(p,r)] * fare[r]) * t[p,r]
+        for p in P
+        for r in Pp[p]
+    )
+    model.setObjective(obj, GRB.MINIMIZE)
 
-    # CAPACITY CONSTRAINTS
+    # Capacity constraints voor elke l in L:
+    # ∑ₚ δ_lp ( ∑ᵣ t[p,r] - ∑_{r: p∈Pp[r]} b_pr[r,p] t[r,p] ) ≥ Q[l] - CAP[l]
     for l in L:
-        model.addConstr(quicksum(delta_lp.get((l, p), 0) * t[p, r] for p in P for r in P)
-            - quicksum(delta_lp.get((l, p), 0) * b_pr.get((p, r), 0) * t[r, p] for p in P for r in Pp)
-            >= Q[l] - CAP[l], name=f"cap_{l}")
+        outflow  = quicksum( delta_lp.get((l,p),0) * quicksum(t[p,r] for r in Pp[p]) for p in P_full )
+        inflow   = quicksum( delta_lp.get((l,p),0) * quicksum(b_pr[(r,p)] * t[r,p]
+                       for r in P_full if p in Pp[r] )
+                       for p in P_full )
+        model.addConstr(outflow - inflow >= Q[l] - CAP[l], name=f"cap_{l}")
 
-    # DEMAND CONSTRAINTS
+    # Demand constraints ∑ᵣ t[p,r] ≤ D[p] voor alle originele p (niet voor P0)
     for p in P:
-        model.addConstr(quicksum(t[p, r] for r in P) <= D[p], name=f"demand_{p}")
+        model.addConstr(quicksum(t[p,r] for r in Pp[p]) <= D[p], name=f"demand_{p}")
+
+    return model, t, P, P_full, Pp, b_pr, P0
 
 
-    for p in P:
-        for r in P:
-            model.addConstr(t[p, r] >= 0, name=f"nonneg_{p}_{r}") # met lb = 0 ook al gevangen
-    # RESULTS
+def solve_and_report(model, t, P, Pp, b_pr, P0):
     model.optimize()
-    model.write("keypath_formulation.lp")
+    model.write("keypath_mixflow.lp")
 
-# Bereken x[p,r] uit t[p,r]
-    x = {}
+    if model.status not in [GRB.OPTIMAL, GRB.TIME_LIMIT]:
+        print("Geen oplossing (status =", model.status, ")")
+        if model.status == GRB.INFEASIBLE:
+            model.computeIIS(); model.write("infeasible.ilp")
+        return
 
+    print("=== Oplossing gevonden ===")
+    print("Objective =", model.objVal)
+
+    # 1) Print alleen recapture flows r ≠ P0
+    print("\n-- Recaptures (p → r, r ≠ spill) --")
     for p in P:
-        for r in Pp:
-            b = b_pr.get((p, r), 0)
-            x[(p, r)] = b * t[p, r].x
-            print(x[(p, r)])
-
-    if model.status in [GRB.OPTIMAL, GRB.TIME_LIMIT]:
-        print("\nAfgeleide mix-flow x[p,r]:")
-        for (p, r), val in x.items():
+        for r in Pp[p]:
+            if r == P0:
+                continue
+            val = t[p, r].X
             if val > 1e-6:
-                print(f"x[{p},{r}] = {val:.2f}")
+                print(f"t[{p} → {r}] = {val:.2f} pax, x = {b_pr[(p,r)]*val:.2f}")
 
-        print(f"Objective value: {model.objVal}\n")
-        for r in P:
-            for p in P:
-                if t[r, p].x > 1e-6:
-                    print(f"t[{p},{r}] = {t[p,r].x}") 
-        
-    else:
-        print("No feasible solution found.")
+    # 2) Bereken en print totaal spill
+    total_spill = sum(t[p, P0].X for p in P if P0 in Pp[p])
+    print(f"\nTotaal spill‐passagiers (naar itinerary {P0}): {total_spill:.2f} pax")
 
-main()
+# In je main‐blok
+if __name__ == "__main__":
+    # 1) Data inlezen
+    df_flights, df_itineraries, df_recapture = load_data("Group_40.xlsx")
 
+    # 2) Model bouwen
+    model, t, P, P_full, Pp, b_pr, p0 = build_model(df_flights, df_itineraries, df_recapture)
+
+    # 3) Oplossen en rapporteren
+    solve_and_report(model, t, P, Pp, b_pr, p0)
