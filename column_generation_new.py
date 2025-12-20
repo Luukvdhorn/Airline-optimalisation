@@ -25,7 +25,7 @@ P_full = P + [P0]                     # all itineraries including fictivious
 Pp = {p: set() for p in P_full}       # all possible itinary moves, build after b_pr is made
 
 # Parameters
-CAP = {l: float(df_flights.loc[l, "Capacity"] *10) for l in L }            # Capacity on a flight
+CAP = {l: float(df_flights.loc[l, "Capacity"]) for l in L }            # Capacity on a flight
 fare = {p: float(df_itin.loc[p, "Price [EUR]"]) for p in P }    # Fare for flight(s) from itinary p
 D = {p: float(df_itin.loc[p, "Demand"])      for p in P }       # Demand for itinary p
 
