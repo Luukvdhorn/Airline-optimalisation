@@ -4,7 +4,7 @@ import pandas as pd
 from openpyxl import * 
 import openpyxl
 
-wb = load_workbook("DemandGroup40.xlsx", data_only=True)
+wb = load_workbook("Assignment 2\DemandGroup40.xlsx", data_only=True)
 ws = wb.active
 
 icao_row = 5    
@@ -39,10 +39,6 @@ while True:
     latitudes.append(float(lat))
     longitudes.append(float(lon))
     runways.append(float(runway))
-    if slot == '-':
-        slots.append(float('inf'))
-    else:
-        slots.append(float(slot))
     col += 1
 
 #DISTANCE FORMULA
@@ -177,10 +173,10 @@ for i in N:
 g = np.ones(n)                      #HUB IS AMSTERDAM 
 g[hub_index] = 0 
 
-LF = 0.80 
+LF = 0.80               # van 0.75 naar 0.80
 
 
 
 #NIEUWE NOG TOEVOEGEN: FLEET
-#SLOTS (STAAT NU IN DEMAND)
+
             
