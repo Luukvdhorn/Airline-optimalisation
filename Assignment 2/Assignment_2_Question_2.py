@@ -12,9 +12,9 @@ lat_row = 6
 lon_row = 7    
 start_col = 3
 runway_row = 8
-slots_row  = 9
+#slots_row  = 9
 runways = []
-slots = []
+#slots = []
 hub_index = 2
 
 RE = 6371.0                                     # Radius Earth
@@ -32,7 +32,7 @@ while True:
     lat = ws.cell(row=lat_row, column=col).value
     lon = ws.cell(row=lon_row, column=col).value
     runway = ws.cell(row=runway_row, column=col).value
-    slot = ws.cell(row=slots_row, column=col).value
+    #slot = ws.cell(row=slots_row, column=col).value
     if icao is None:
         break
     airports.append(icao)
