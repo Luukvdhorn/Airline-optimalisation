@@ -402,7 +402,7 @@ from gurobipy import Model, GRB, quicksum
 
 def main():
     model = Model("Model_1B")
-    model.write("network_fleet_development.lp")
+    #model.write("network_fleet_development.lp")
     model.setParam('TimeLimit', 10)
 
     x = model.addVars(N, N, name="x", vtype=GRB.INTEGER, lb=0)
