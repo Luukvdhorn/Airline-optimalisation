@@ -12,9 +12,7 @@ lat_row = 6
 lon_row = 7    
 start_col = 3
 runway_row = 8
-#slots_row  = 9
 runways = []
-#slots = []
 hub_index = 2
 
 RE = 6371.0                                     # Radius Earth
@@ -32,7 +30,6 @@ while True:
     lat = ws.cell(row=lat_row, column=col).value
     lon = ws.cell(row=lon_row, column=col).value
     runway = ws.cell(row=runway_row, column=col).value
-    #slot = ws.cell(row=slots_row, column=col).value
     if icao is None:
         break
     airports.append(icao)
@@ -57,6 +54,22 @@ for i in range(n):
     for j in range(n):
         dij[i, j] = distance(latitudes[i], longitudes[i], latitudes[j], longitudes[j])
 
+#DEMAND IMPORT
+demand_start_row = icao_row + 7
+demand_start_col = start_col 
+
+n = len(airports)
+D = np.zeros((n, n))
+
+for i in range(n):
+    for j in range(n):
+        cell = ws.cell(row=demand_start_row + i, column=demand_start_col + j).value
+        try:
+            D[i, j] = float(cell) if cell is not None else 0
+        except:
+            D[i, j] = 0
+
+print(D)
 
 
 #FLEET IMPORT
@@ -76,7 +89,17 @@ for row in sheet2.iter_rows(min_row=2, values_only=True):
 
 df_aircraft = pd.DataFrame(data, index=aircraft_names)
 
-print (df_aircraft)
+
+#HOUR COEFFICIENTS
+wb = openpyxl.load_workbook("Assignment 2/HourCoefficients.xlsx", data_only=True)
+sheet = wb.active
+
+headers = [sheet.cell(row=2, column=col).value for col in range(4, 28)]
+hour_coefficients = [sheet.cell(row=5, column=col).value for col in range(4, 28)]
+
+hour_coefficients_EHAM = pd.DataFrame([hour_coefficients], columns=headers, index=["Amsterdam"])
+
+print(hour_coefficients_EHAM)
 
 
 # DATA IMPORT
@@ -122,13 +145,18 @@ TAT = np.zeros(ac)                                                      #TURN AR
 for k in K:
     TAT[k] = df_aircraft['Average TAT [min]'][k]
 
+Fleet = np.zeros(ac)                                                      #Fleettypes
+for k in K:
+    Fleet[k] = df_aircraft['Fleet'][k]
+
+#COSTS 
 
 cl = np.zeros(ac)                           #COSTS WEEKLY LEASE
 for k in K:
     cl[k] = df_aircraft['Lease Cost [€/day]'][k]
     
 
-C = np.zeros(ac)                            #COST FIXED OPERATINGH
+C = np.zeros(ac)                            #COST FIXED OPERATING
 for k in K:
     C[k] = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'][k]
     
@@ -143,6 +171,7 @@ for k in K:
 C_Tij = np.zeros((n, n, ac))                #TIME COST PER LEG
 for k in K:
     C_Tij[ :, :,k] = CT[k] * (d/ v[k])
+print(C_Tij)
     
 
 CF = np.zeros(ac)                           #FUEL COST PARAMETER
@@ -155,11 +184,11 @@ for k in K:
     
 
 
-Ck_ij = np.zeros((n, n, ac))                #tOTAL OPERARION COST PER LEG (WITH DISCOUNT OF 30%)
+Ck_ij = np.zeros((n, n, ac))                #TOTAL OPERARION COST PER LEG (WITH DISCOUNT OF 30%)
 for k in K:
     for i in N:
         for j in N:
-            Ck_ij[i, j, k] = (C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]) * 0.7
+            Ck_ij[i, j, k] = (C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]) * 0.7     #(Nu heb ik die 0,7 er nog staan kan weg later)
 
 a = {}                                  #BIG M CONSTRAIN FOR RUNWAYS
 for i in N:
@@ -175,8 +204,5 @@ g[hub_index] = 0
 
 LF = 0.80               # van 0.75 naar 0.80
 
-
-
-#NIEUWE NOG TOEVOEGEN: FLEET
 
             
