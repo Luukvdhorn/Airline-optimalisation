@@ -246,4 +246,36 @@ g[hub_index] = 0
 LF = 0.80               # van 0.75 naar 0.80
 
 
+ #VANAF HIER CODE DYNAMIC PROGRAMMEREN 
+
+def possible_actions(state, aircraft):
+   
+   def is_valid_destination(destination):
+        # Check runway requirement and range requirement
+        return (RAC[k] < RAP[destination] and ra[k] >= distance[state, destination])
+    
+    # Only flights to and from the hub are considered. Also consider ground arc
+    if state == hub_index:
+        return [airport for airport in airports if is_valid_destination(airport)]
+    else:
+        possible_destinations = [state, hub_index]
+        return [airport for airport in possible_destinations if is_valid_destination(airport)]
+
+def get_flight_time(depart_from, arive_at, aircraft):
+    """
+    Compute flight time in minutes.
+    Besides the TAT, include: 15 minutes extra for takeoff, 15 minutes extra for landing
+    """
+    distance = distance_matrix.loc[Airports[depart_from], Airports[arive_at]]
+    speed = sp[aircraft]
+    return 15 + (distance / speed)*60 + TAT[aircraft] + 15
+
+
+
+
+def dynamic_programming(aircraft, D):
+
+
+
+
             
