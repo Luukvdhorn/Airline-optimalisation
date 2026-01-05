@@ -248,34 +248,41 @@ LF = 0.80               # van 0.75 naar 0.80
 
  #VANAF HIER CODE DYNAMIC PROGRAMMEREN 
 
-def possible_actions(state, aircraft):
+def possible_actions(state, k):
    
    def is_valid_destination(destination):
         # Check runway requirement and range requirement
-        return (RAC[k] < RAP[destination] and ra[k] >= distance[state, destination])
+        return (RAC[k] < RAP[destination] and ra[k] >= d[state, destination])
     
     # Only flights to and from the hub are considered. Also consider ground arc
     if state == hub_index:
-        return [airport for airport in airports if is_valid_destination(airport)]
+        return [airport for airport in range(n) if is_valid_destination(airport)]
     else:
         possible_destinations = [state, hub_index]
         return [airport for airport in possible_destinations if is_valid_destination(airport)]
 
-def get_flight_time(depart_from, arive_at, aircraft):
+def get_flight_time(depart_from, arive_at, k):
+        """
+        Compute flight time in minutes.
+        Besides the TAT, include: 15 minutes extra for takeoff, 15 minutes extra for landing
+        """
+        distance = d[airports[depart_from], airports[arive_at]]
+        speed = v[k]
+        return 15 + (distance / speed)*60 + TAT[k] + 15
+
+def time_from_timestep(time_step):
     """
-    Compute flight time in minutes.
-    Besides the TAT, include: 15 minutes extra for takeoff, 15 minutes extra for landing
+    Convert time step to day and time.
     """
-    distance = distance_matrix.loc[Airports[depart_from], Airports[arive_at]]
-    speed = sp[aircraft]
-    return 15 + (distance / speed)*60 + TAT[aircraft] + 15
+    time_in_day = time_step % (24*10)
+    hour = time_in_day // 10
+    minute = time_in_day % 10
+    time = f"{hour:02d}:{minute:02d}"
+    return time
 
 
 
 
-def dynamic_programming(aircraft, D):
-
-
-
+print(d)
 
             
