@@ -90,16 +90,27 @@ for row in sheet2.iter_rows(min_row=2, values_only=True):
 df_aircraft = pd.DataFrame(data, index=aircraft_names)
 
 
-#HOUR COEFFICIENTS
+#HOUR COEFFICIENT
 wb = openpyxl.load_workbook("Assignment 2/HourCoefficients.xlsx", data_only=True)
-sheet = wb.active
+ws = wb.active
 
-headers = [sheet.cell(row=2, column=col).value for col in range(4, 28)]
-hour_coefficients = [sheet.cell(row=5, column=col).value for col in range(4, 28)]
+start_row = 3        #AMSTERDAM
+start_col = 4        #Hour 0 
+n = len(airports)    #LENGTE RIJEN
+T = 24               #AANTAL UREN (D t/m AA)
 
-hour_coefficients_EHAM = pd.DataFrame([hour_coefficients], columns=headers, index=["Amsterdam"])
+H = np.zeros((n, T))
 
-print(hour_coefficients_EHAM)
+for i in range(n):
+    for t in range(T):
+        cell = ws.cell(row=start_row + i, column=start_col + t).value
+        try:
+            H[i, t] = float(cell) if cell is not None else 0
+        except:
+            H[i, t] = 0
+
+
+print(H)
 
 
 # DATA IMPORT
@@ -164,14 +175,14 @@ for k in K:
 CT = np.zeros(ac)                           #TIME COST PARAMETER
 for k in K:
     CT[k] = df_aircraft['Cost per Hour'][k]
-    print(CT[k])
+    
 
 
 #Nog checken
 C_Tij = np.zeros((n, n, ac))                #TIME COST PER LEG
 for k in K:
     C_Tij[ :, :,k] = CT[k] * (d/ v[k])
-print(C_Tij)
+
     
 
 CF = np.zeros(ac)                           #FUEL COST PARAMETER
