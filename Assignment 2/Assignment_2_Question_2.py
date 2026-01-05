@@ -69,6 +69,8 @@ for i in range(n):
         except:
             D[i, j] = 0
 
+
+
 print(D)
 
 
@@ -109,8 +111,36 @@ for i in range(n):
         except:
             H[i, t] = 0
 
+import numpy as np
+import pandas as pd
 
-print(H)
+# veronderstel dat je dit al hebt:
+# airports = [...]       # lijst van ICAO-codes
+# D        = np.ndarray  # shape (n,n), daily demand per route
+# H        = np.ndarray  # shape (n,24), hour coefficients per airport
+
+n, T = D.shape[0], H.shape[1]
+hub_idx = airports.index('EHAM')   # index van Amsterdam
+
+# 1) hub_arr[i,t] = D[i,hub] * H[i,t]
+hub_arr = D[:, hub_idx][:, None] * H
+
+# 2) hub_dep[j,t] = D[hub,j] * H[hub,t]
+hub_dep = np.outer(D[hub_idx, :], H[hub_idx, :])
+
+# 3) geen self-loops
+hub_arr[hub_idx, :] = 0
+hub_dep[hub_idx, :] = 0
+
+# 4) optioneel: zet in DataFrame voor mooi overzicht
+hours = [f'Uur_{t}' for t in range(T)]
+df_arr = pd.DataFrame(hub_arr, index=airports, columns=hours)
+df_dep = pd.DataFrame(hub_dep, index=airports, columns=hours)
+
+print("=== Demand for flights that arive in EHAM, given hour is departure time in orgin ===")
+print(df_dep)
+print("\n=== Demand for flights that depart from EHAM ===")
+print(df_dep)
 
 
 # DATA IMPORT
