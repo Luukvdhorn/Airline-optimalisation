@@ -4,7 +4,7 @@ import pandas as pd
 from openpyxl import * 
 import openpyxl
 
-wb = load_workbook("Assignment 2\DemandGroup40.xlsx", data_only=True)
+wb = load_workbook("Assignment 2/DemandGroup40.xlsx", data_only=True)
 ws = wb.active
 
 icao_row = 5    
@@ -70,11 +70,7 @@ for i in range(n):
             D[i, j] = 0
 
 
-
-print(D)
-
-
-#FLEET IMPORT
+#FLEET IMPORT. --> Heel anders gedaan dan inladen van andere data: aanpassen zodat het een geheel wordt
 wb2 = openpyxl.load_workbook("Assignment 2/FleetType.xlsx", data_only=True)
 sheet2 = wb2.active
 
@@ -89,8 +85,9 @@ for row in sheet2.iter_rows(min_row=2, values_only=True):
     values = row[1:1 + n_ac]  
     data[parameter_name] = values
 
-df_aircraft = pd.DataFrame(data, index=aircraft_names)
+df_aircraft = pd.DataFrame(data, index=aircraft_names) #vooral hier anders met aanmaken nieuwe dataset
 
+print(df_aircraft)
 
 #HOUR COEFFICIENT
 wb = openpyxl.load_workbook("Assignment 2/HourCoefficients.xlsx", data_only=True)
@@ -111,13 +108,14 @@ for i in range(n):
         except:
             H[i, t] = 0
 
-import numpy as np
-import pandas as pd
+
 
 # veronderstel dat je dit al hebt:
 # airports = [...]       # lijst van ICAO-codes
 # D        = np.ndarray  # shape (n,n), daily demand per route
 # H        = np.ndarray  # shape (n,24), hour coefficients per airport
+
+#CALCULATION HOURLY DEMAND --> even herschrijven zodat meer een geheel wordt/geen chat
 
 n, T = D.shape[0], H.shape[1]
 hub_idx = airports.index('EHAM')   # index van Amsterdam
@@ -134,7 +132,7 @@ hub_dep[hub_idx, :] = 0
 
 # 4) optioneel: zet in DataFrame voor mooi overzicht
 hours = [f'Uur_{t}' for t in range(T)]
-df_arr = pd.DataFrame(hub_arr, index=airports, columns=hours)
+df_arr = pd.DataFrame(hub_arr, index=airports, columns=hours) # zou dit niet doen... is niet echt nodig namelijk
 df_dep = pd.DataFrame(hub_dep, index=airports, columns=hours)
 
 print("=== Demand for flights that arive in EHAM, given hour is departure time in orgin ===")
@@ -147,6 +145,7 @@ print(df_dep)
 N = range(len(airports))                    # Set of airports; i, j in N
 K = range(len(df_aircraft))                 # Set of aircrafts; k in K
 ac = len(df_aircraft)                       # Total amount of aircrafts
+
 
 d = np.zeros((n, n))                        # Distance between i and j
 for i in N:
@@ -164,19 +163,19 @@ for i in N:                                 #YIELD
 
 v = np.zeros(ac)                            #SPEED OF AIRPLANES (k)
 for k in K:
-    v[k] = df_aircraft['Speed [km/h]'][k]
+    v[k] = df_aircraft['Speed [km/h]'].iloc[k]
     
 s = np.zeros(ac)                            #SEATS
 for k in K:
-    s[k] = df_aircraft['Seats'][k]
+    s[k] = df_aircraft['Seats'].iloc[k]
 
 ra = np.zeros(ac)                           #RANGE OF AIRCRAFT
 for k in K:
-    ra[k] = df_aircraft['Maximum Range [km]'][k]
+    ra[k] = df_aircraft['Maximum Range [km]'].iloc[k]
 
 RAC = np.zeros(ac)                          #RUNWAY REQUIREMENT DEPARTURE
 for k in K:
-    RAC[k] = df_aircraft['Runway Required [m]'][k]
+    RAC[k] = df_aircraft['Runway Required [m]'].iloc[k]
 
 RAP = np.zeros(n)                           #RUNWAY REQUIREMENT ARRIVAL
 for j in N:
@@ -184,27 +183,27 @@ for j in N:
 
 TAT = np.zeros(ac)                                                      #TURN AROUND TIMES IN MIN
 for k in K:
-    TAT[k] = df_aircraft['Average TAT [min]'][k]
+    TAT[k] = df_aircraft['Average TAT [min]'].iloc[k]
 
 Fleet = np.zeros(ac)                                                      #Fleettypes
 for k in K:
-    Fleet[k] = df_aircraft['Fleet'][k]
+    Fleet[k] = df_aircraft['Fleet'].iloc[k]
 
 #COSTS 
 
 cl = np.zeros(ac)                           #COSTS WEEKLY LEASE
 for k in K:
-    cl[k] = df_aircraft['Lease Cost [€/day]'][k]
+    cl[k] = df_aircraft['Lease Cost [€/day]'].iloc[k]
     
 
 C = np.zeros(ac)                            #COST FIXED OPERATING
 for k in K:
-    C[k] = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'][k]
+    C[k] = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'].iloc[k]
     
 
 CT = np.zeros(ac)                           #TIME COST PARAMETER
 for k in K:
-    CT[k] = df_aircraft['Cost per Hour'][k]
+    CT[k] = df_aircraft['Cost per Hour'].iloc[k]
     
 
 
@@ -213,23 +212,19 @@ C_Tij = np.zeros((n, n, ac))                #TIME COST PER LEG
 for k in K:
     C_Tij[ :, :,k] = CT[k] * (d/ v[k])
 
-    
-
 CF = np.zeros(ac)                           #FUEL COST PARAMETER
 for k in K:
-    CF[k] = df_aircraft['Fuel Cost Parameter'][k]
+    CF[k] = df_aircraft['Fuel Cost Parameter'].iloc[k]
 
 C_Fij = np.zeros((n, n, ac))                #FUEL COST PER LEG
 for k in K:
     C_Fij[:, :, k] = ((CF[k] * 1.42) / 1.5) * d
     
-
-
-Ck_ij = np.zeros((n, n, ac))                #TOTAL OPERARION COST PER LEG (WITH DISCOUNT OF 30%)
+Ck_ij = np.zeros((n, n, ac))                #TOTAL OPERARION COST PER LEG 
 for k in K:
     for i in N:
         for j in N:
-            Ck_ij[i, j, k] = (C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]) * 0.7     #(Nu heb ik die 0,7 er nog staan kan weg later)
+            Ck_ij[i, j, k] = C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]
 
 a = {}                                  #BIG M CONSTRAIN FOR RUNWAYS
 for i in N:
@@ -240,49 +235,77 @@ for i in N:
             else:
                 a[i,j,k] = 0
 
-g = np.ones(n)                      #HUB IS AMSTERDAM 
-g[hub_index] = 0 
+# g = np.ones(n)                      #HUB IS AMSTERDAM 
+# g[hub_index] = 0 #hebben we dit nog nodig?
 
 LF = 0.80               # van 0.75 naar 0.80
 
 
- #VANAF HIER CODE DYNAMIC PROGRAMMEREN 
+#VANAF HIER CODE DYNAMIC PROGRAMMEREN 
 
-def possible_actions(state, k):
-   
-   def is_valid_destination(destination):
-        # Check runway requirement and range requirement
-        return (RAC[k] < RAP[destination] and ra[k] >= d[state, destination])
-    
-    # Only flights to and from the hub are considered. Also consider ground arc
-    if state == hub_index:
-        return [airport for airport in range(n) if is_valid_destination(airport)]
+
+
+#constraints airports functie (runway, range, minimaal 6 uur)
+    #stage = index van luchthaven
+    #required runway for aircraft < availible runway AND range arcraft 
+def  action_possible(stage, aircraft_type):  
+    possible_destinations = []
+
+    #optie 1: aircraft is at hub 
+    if stage == hub_index:
+        candidate_destinations = range(len(airports)) # (choose other airport (can be hub))
+    #optie 2: aircraft is not at hub 
     else:
-        possible_destinations = [state, hub_index]
-        return [airport for airport in possible_destinations if is_valid_destination(airport)]
-
-def get_flight_time(depart_from, arive_at, k):
-        """
-        Compute flight time in minutes.
-        Besides the TAT, include: 15 minutes extra for takeoff, 15 minutes extra for landing
-        """
-        distance = d[airports[depart_from], airports[arive_at]]
-        speed = v[k]
-        return 15 + (distance / speed)*60 + TAT[k] + 15
-
-def time_from_timestep(time_step):
-    """
-    Convert time step to day and time.
-    """
-    time_in_day = time_step % (24*10)
-    hour = time_in_day // 10
-    minute = time_in_day % 10
-    time = f"{hour:02d}:{minute:02d}"
-    return time
-
-
-
-
-print(d)
-
+        candidate_destinations = [stage, hub_index] # (stay or back to hub)
             
+           
+    for destination in candidate_destinations:
+            if (RAC[aircraft_type] < RAP[destination] and 
+                ra[aircraft_type] >= d[stage, destination]):
+                possible_destinations.append(destination)
+    return(possible_destinations)
+
+#TEST als je vanaf hub kijkt heb je met vliegtuig 1 20 opties
+print(f'test action: {action_possible(2, 1)}')
+
+
+#Time calculation -->function to calculate blocking time of one fligth --> sum minimal 6 hours after assigning routes Denk ik (ros)
+def block_time(airport_from, airport_to, aircraft_type):
+    if airport_from == airport_to: #als vliegtuig blijft staan, geen blocking time
+        BT = 0
+    else:
+        BT = 15 + (d[airport_from, airport_to] / v[aircraft_type]) *60 + TAT[aircraft_type] +15
+        
+    return BT
+
+#TEST berekenen blocking time: van ams naar ams met aircraft 1 
+print(f'test bt: {block_time(2, 2, 1)}')
+
+#Scheduling horizon: time steps 
+#time step has to be converted to a time 00:06, 00:12 etc
+def timestep_converting(timestep):
+    step = 6 # 6 min per step
+    steps_day = 24 * 10
+    total_minutes = (timestep % steps_day) * step # tijdstap binnen de dag
+    
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    time = f"{hours:02d}:{minutes:02d}"
+    return time 
+
+#TEST convert timestep to tijdstip voor timetable: LET OP: step 1 = 00:00 
+print(f'test time= {timestep_converting(4)}')
+
+
+#TO do:
+
+#denk dat het handig is om de berekeningen die we eerder doen wel om te schrijven naar functies, dat is makkelijker met aanroepen
+
+#demand function
+
+#cost function
+
+#revenue function
+
+
+#dynamic programming            
