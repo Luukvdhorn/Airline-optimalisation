@@ -196,35 +196,25 @@ for k in K:
     cl[k] = df_aircraft['Lease Cost [€/day]'].iloc[k]
     
 
-C = np.zeros(ac)                            #COST FIXED OPERATING
-for k in K:
-    C[k] = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'].iloc[k]
+# C_fix = np.zeros(ac)                            #COST FIXED OPERATING
+# for k in K:
+#     C_fix[k] = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'].iloc[k]
     
 
-CT = np.zeros(ac)                           #TIME COST PARAMETER
-for k in K:
-    CT[k] = df_aircraft['Cost per Hour'].iloc[k]
-    
+# CT = np.zeros(ac)                           #TIME COST PARAMETER
+# for k in K:
+#     CT[k] = df_aircraft['Cost per Hour'].iloc[k]
+
+# CF = np.zeros(ac)                           #FUEL COST PARAMETER
+# for k in K:
+#     CF[k] = df_aircraft['Fuel Cost Parameter'].iloc[k]   
+
+C_fix = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'].values
+CT    = df_aircraft['Cost per Hour'].values
+CF    = df_aircraft['Fuel Cost Parameter'].values
+v     = df_aircraft['Speed [km/h]'].values
 
 
-#Nog checken
-C_Tij = np.zeros((n, n, ac))                #TIME COST PER LEG
-for k in K:
-    C_Tij[ :, :,k] = CT[k] * (d/ v[k])
-
-CF = np.zeros(ac)                           #FUEL COST PARAMETER
-for k in K:
-    CF[k] = df_aircraft['Fuel Cost Parameter'].iloc[k]
-
-C_Fij = np.zeros((n, n, ac))                #FUEL COST PER LEG
-for k in K:
-    C_Fij[:, :, k] = ((CF[k] * 1.42) / 1.5) * d
-    
-Ck_ij = np.zeros((n, n, ac))                #TOTAL OPERARION COST PER LEG 
-for k in K:
-    for i in N:
-        for j in N:
-            Ck_ij[i, j, k] = C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]
 
 a = {}                                  #BIG M CONSTRAIN FOR RUNWAYS
 for i in N:
@@ -304,8 +294,41 @@ print(f'test time= {timestep_converting(4)}')
 #demand function
 
 #cost function
+def operating_costs(d, k, fuel_costs=1.42):
+    
+    C_t = CT[k]
+    C_f = CF[k]
+    Speed = v[k]
+
+    C_fixed = C_fix[k]
+    C_time = C_t * d / Speed
+    C_fuel = ((C_f * fuel_costs / 1.5) * d)
+
+    calculate_operating_cost = C_fixed + C_time + C_fuel
+
+    return calculate_operating_cost
+
+Ck_ij = np.zeros((n, n, ac))
+
+for k in K:
+    for i in range(n):
+        for j in range(n):
+            Ck_ij[i, j, k] = operating_costs(d[i, j], k) if i != j else 0
+            
+#TEST OM ALLE OPERATING COST TE PRINTEN (als de vliegtuigen groter worden wordt ook cost hoger ;), ook gecheckt met oude manier, zijn gelijk.
+#k = 1 
+#df_cost = pd.DataFrame(Ck_ij[:, :, k], index=airports, columns=airports)
+#print(df_cost.round(0))
 
 #revenue function
+def revenue_function(y, d):
+    revenue = y * d
+    
+    return revenue
+
+#Hier moet later wellicht nog de passagiers per time step bij? Maar dat weet ik nu niet zo goed. 
+
+
 
 
 #dynamic programming            
