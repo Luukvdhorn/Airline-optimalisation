@@ -89,8 +89,6 @@ for row in sheet2.iter_rows(min_row=2, values_only=True):
 
 df_aircraft = pd.DataFrame(data, index=aircraft_names) #vooral hier anders met aanmaken nieuwe dataset
 
-print(df_aircraft)
-
 #HOUR COEFFICIENT
 wb = openpyxl.load_workbook("Assignment 2/HourCoefficients.xlsx", data_only=True)
 ws = wb.active
@@ -109,38 +107,6 @@ for i in range(n):
             H[i, t] = float(cell) if cell is not None else 0
         except:
             H[i, t] = 0
-
-
-
-# veronderstel dat je dit al hebt:
-# airports = [...]       # lijst van ICAO-codes
-# D        = np.ndarray  # shape (n,n), daily demand per route
-# H        = np.ndarray  # shape (n,24), hour coefficients per airport
-
-#CALCULATION HOURLY DEMAND --> even herschrijven zodat meer een geheel wordt/geen chat
-
-# n, T = D.shape[0], H.shape[1]
-# hub_idx = airports.index('EHAM')   # index van Amsterdam
-
-# # 1) hub_arr[i,t] = D[i,hub] * H[i,t]
-# hub_arr = D[:, hub_idx][:, None] * H
-
-# # 2) hub_dep[j,t] = D[hub,j] * H[hub,t]
-# hub_dep = np.outer(D[hub_idx, :], H[hub_idx, :])
-
-# # 3) geen self-loops
-# hub_arr[hub_idx, :] = 0
-# hub_dep[hub_idx, :] = 0
-
-# # 4) optioneel: zet in DataFrame voor mooi overzicht
-# hours = [f'Uur_{t}' for t in range(T)]
-# df_arr = pd.DataFrame(hub_arr, index=airports, columns=hours) # zou dit niet doen... is niet echt nodig namelijk
-# df_dep = pd.DataFrame(hub_dep, index=airports, columns=hours)
-
-# print("=== Demand for flights that arive in EHAM, given hour is departure time in orgin ===")
-# print(df_dep)
-# print("\n=== Demand for flights that depart from EHAM ===")
-# print(df_dep)
 
 
 # DATA IMPORT
@@ -233,11 +199,7 @@ for i in N:
 LF = 0.80               # van 0.75 naar 0.80
 
 
-#VANAF HIER CODE DYNAMIC PROGRAMMEREN 
-
-
-
-#constraints airports functie (runway, range, minimaal 6 uur)
+# constraints airports functie (runway, range, minimaal 6 uur)
     #stage = index van luchthaven
     #required runway for aircraft < availible runway AND range arcraft 
 def  action_possible(stage, aircraft_type):  
@@ -326,101 +288,24 @@ def revenue_function(orgin, destination, flow):
 
 print(f'Revenue €{revenue_function(2, 3, 10):.2f}')
 
-# DACHT MAAK ER EEN DICONARY VAN WANT DAN KAN JE UITEINDELIJK DAAR DE GEVLOGEN REIZIGERS VANAF TREKKEN HAD DAT EERST OOK NIET
-demand_dic = {}                                                 # Create dictonary from demand. Then will be easier to update demand later
-for i in range(n):
-    for j in range(n):
-        demand_dic[(i,j)] = {}
-        for t in range(24):
-            demand_dic[(i,j)][t] = D[i,j] * H[i,t]
+def initial_demand(orgin, destination, hour):     # DIT WAS ZO VAN DIT KRIJG JE UIT GEWOON INEZEN
+    total_demand = D[orgin, destination]
+    demand = H[orgin, hour] * total_demand
+    return demand
 
-def usable_demand(origin, destination, hour, demand_dic):
-    demand_options = {}
-    for i in (0, 1, 2):
-        t = hour - i
-        if t < 0:
-            continue
-        rem = demand_dic.get((origin, destination), {}).get(t, 0)
-        if rem > 0:
-            demand_options[t] = rem
-    return demand_options
+print(f'Demand is {initial_demand(1, 2, 5)}')
 
-print(f'Demand is {usable_demand(1, 2, 12, demand_dic)}')
+def usable_demand(orgin, destination, hour):       # HIER VOEG JE TOE DAT JE UIT DE UREN ER VOOR OOK KAN KRIJGEN. PROBLEEM IS ALLEEN DAT IK HEIR NOG GEEN REKENING HIELD MET 
+    start_demand = initial_demand(orgin, destination, hour)   # DAT JE EERST KIJK NAAR T ALS ER DAN NOG PLEK IS NAAR T -1 EN ALS ER DAN NOG PLEK IS NAAR T -2
+    use_demand = start_demand + initial_demand(orgin, destination, hour-1) + initial_demand(orgin, destination, hour-2)
+    return use_demand
+
+print(f'Demand with 2 previous time slots is {usable_demand(1, 2, 5)}')
 
 
-# NIEUWE PORBEERSELS VOOR DEMAND VIA CHAT
-def get_flow(origin, destination, hour, capacity, demand_dic):
-    """
-    Pakt uit de uren hour, hour-1 en hour-2 van route (origin→destination)
-    tot capacity is bereikt of geen vraag meer over is.
-    Maakt alleen een kopie van de sub-dict voor (origin,destination),
-    zodat demand_dic buiten deze functie onaangeroerd blijft.
-
-    Returned:
-      flown            = aantal passagiers dat gevlogen kan worden
-      new_demand_dic   = aangepaste kopie van demand_dic
-    """
-    # 1) Shallow copy van de outer dict (alleen de mapping keys→subdicts)
-    new_demand_dic = demand_dic.copy()
-
-    # 2) Diepe copy van wél die ene sub-dict (o,d) die we gaan muteren
-    sub = new_demand_dic[(origin, destination)].copy()
-
-    flown = 0
-    for lag in (0, 1, 2):
-        t = hour - lag
-        if t < 0:
-            continue
-        avail = sub.get(t, 0)
-        if avail <= 0:
-            continue
-        take = min(avail, capacity - flown)
-        sub[t] = avail - take
-        flown += take
-        if flown >= capacity:
-            break
-
-    # 3) Plaats de aangepaste sub-dict terug in de outer dict
-    new_demand_dic[(origin, destination)] = sub
-
-    return flown, new_demand_dic
-
-def potential_flow(origin, destination, hour, capacity):
-    """
-    Bereken in uren hour, hour-1, hour-2 de maximale beschikbare vraag
-    (D = daily demand matrix, H = hour coefficients), zonder mutatie.
-    Returned: min(capacity, som van de drie uren)
-    """
-    total = 0.0
-    for lag in (0, 1, 2):
-        t = hour - lag
-        if t < 0:
-            continue
-        # D[origin,destination] is de dagvraag voor de route
-        total += D[origin, destination] * H[origin, t]
-    return min(capacity, total)
-
-
-# HOE IK EEERST DEMAND HAD GEDAAN
-# def initial_demand(orgin, destination, hour):     # DIT WAS ZO VAN DIT KRIJG JE UIT GEWOON INEZEN
-#     total_demand = D[orgin, destination]
-#     demand = H[orgin, hour] * total_demand
-#     return demand
-
-# print(f'Demand is {initial_demand(1, 2, 5)}')
-
-# def usable_demand(orgin, destination, hour):       # HIER VOEG JE TOE DAT JE UIT DE UREN ER VOOR OOK KAN KRIJGEN. PROBLEEM IS ALLEEN DAT IK HEIR NOG GEEN REKENING HIELD MET 
-#     start_demand = initial_demand(orgin, destination, hour)   # DAT JE EERST KIJK NAAR T ALS ER DAN NOG PLEK IS NAAR T -1 EN ALS ER DAN NOG PLEK IS NAAR T -2
-#     use_demand = start_demand + initial_demand(orgin, destination, hour-1) + initial_demand(orgin, destination, hour-2)
-#     return use_demand
-
-# print(f'Demand with 2 previous time slots is {usable_demand(1, 2, 5)}')
-
-
-#dynamic programming
-
-def dynamic_programming(aircraft_type, demand_dic):
+def dynamic_programming(aircraft_type):
     total_steps = 24 * 10           # Amount of steps in the day
+    end_time = 24 * 60              # Time corresponding to last step
 
     profit_matrix = np.zeros((len(airports), total_steps))      # Storage space for profit
     action_matrix = np.zeros((len(airports), total_steps))      # Storage of action taken
@@ -459,9 +344,8 @@ def dynamic_programming(aircraft_type, demand_dic):
                      
                      opertion_cost = operating_costs(j, k, aircraft_type)
                      current_hour, current_min = timestep_converting(current_time_step)
-                     cap = 0.8 * s[aircraft_type]
-                     flow = potential_flow(j, k, current_hour, cap)         # HIER VOOR DEMAND DINGEN VERANDERT.
-                     revenue = revenue_function(j, k, flow)
+                     demand = usable_demand(j, k, current_hour)
+                     revenue = revenue_function(j, k, min(demand, s[aircraft_type]))
                      profit = revenue - opertion_cost
                      arrival_time_step = math.ceil(arrival_time/6)-1
                      current_solution = profit + future_profit
@@ -475,124 +359,42 @@ def dynamic_programming(aircraft_type, demand_dic):
 
     return action_matrix, profit_matrix
 
-print(f'Poging {dynamic_programming(1, demand_dic)}')
 
-# DIT IS DE SCHEDUEL FUNCTIE ZOALS IK HEM GESCHREVEN HEB
-# def scheduel(aircraft_type, action_matrix, profit_matrix):
-#     optimal_route = [[0,2]]                 # start time step (0) and Start airport (2 = hub)
-#     time_step = 0
-#     current_airport = 2
-#     operation_time = 0
+print(f'Poging {dynamic_programming(2)}')
 
-#     while time_step <= 24 * 10:              # 24 * 10 is the last time step
-#         next_airport = int(action_matrix[current_airport][time_step])
-#         if next_airport == current_airport:
-#             next_time_step = time_step + 1
-#         else:
-#             next_time_step = time_step + math.floor(block_time(current_airport, next_airport, aircraft_type))
-#             operation_time += block_time(current_airport, next_airport, aircraft_type)
-#             optimal_route.append([next_time_step, next_airport])
+def scheduel(aircraft_type, action_matrix, profit_matrix):
+    optimal_route = [[0,2]]                 # start time step (0) and Start airport (2 = hub)
+    time_step = 0
+    current_airport = 2
+    operation_time = 0
 
-#         current_airport = int(next_airport)
-#         time_step = next_time_step
-
-#     profit = profit_matrix[1][0] - cl[aircraft_type]
-
-#     return optimal_route, profit, operation_time
-
-# DEZE HAD IK VAN CHAT GEKREGEN TOEN IN HIER BOVEN MET DEMAND BEN GAAN SPELEN
-def scheduel(aircraft_type, action_matrix, profit_matrix, demand_dic):
-    optimal_route   = [[0, hub_index]]
-    time_step       = 0
-    current_airport = hub_index
-    op_time         = 0
-    total_steps     = 24 * 10
-
-    # werk op een diepe kopie zodat originele demand_dic heel blijft
-    remaining_demand = copy.deepcopy(demand_dic)
-
-    while time_step < total_steps:
+    while time_step <= 24 * 10:              # 24 * 10 is the last time step
         next_airport = int(action_matrix[current_airport][time_step])
-
-        # Einde van de route: actie is -1 of buiten bereik
-        if next_airport < 0 or next_airport >= len(airports):
-            break
-
         if next_airport == current_airport:
-            # blijf staan, ga één stap verder
             next_time_step = time_step + 1
         else:
-            # vlieg een echte segment
-            bt = block_time(current_airport, next_airport, aircraft_type)
-            next_time_step = time_step + math.floor(bt / 6)
-            op_time += bt
-
-            # bepaal flow én werk de vraag bij
-            cap = 0.8 * s[aircraft_type]
-            hour, _ = timestep_converting(time_step)
-            flown, remaining_demand = get_flow(
-                current_airport, next_airport, hour, cap, remaining_demand
-            )
-
+            next_time_step = time_step + math.floor(block_time(current_airport, next_airport, aircraft_type))
+            operation_time += block_time(current_airport, next_airport, aircraft_type)
             optimal_route.append([next_time_step, next_airport])
 
-        # update voor de volgende iteratie
-        current_airport = next_airport
-        time_step       = next_time_step
+        current_airport = int(next_airport)
+        time_step = next_time_step
 
-    # bereken de totale profit (lease kost aftrekken)
-    profit = profit_matrix[hub_index][0] - cl[aircraft_type]
-    return optimal_route, profit, op_time
+    profit = profit_matrix[1][0] - cl[aircraft_type]
 
-
-# HIER WAS IK BEZIG MET DEMAND UPDATE NADAT ER EEN VLUCHT GEKOZEN IS
-# def demand_update(optimal_route, aircraft_type):
-#     for i in range(1, len(optimal_route)-1):
-#         current_airport = optimal_route[i-1][1]                         # Take first airport in optimal_route as staring airport, i starts at 1 therefor i -1
-#         next_airport = optimal_route[i][1]                              # Next apport is therefor i
-#         hour, minute = timestep_converting(optimal_route[i][0])         # Hour and minute, when airport i is reached
-#         demand = usable_demand(current_airport, next_airport, hour)     # Get demand
-#         demand_check1 = 0                                               # Amount of demand that is full filled
-#         demand_check2 = 0
-#         capacity = 0.8 * s[aircraft_type]                               # Capacity of aircraft type
-
-#         if demand >= capacity:                                          # If demand is higher than capacity only the capacity amount is full filled
-#             demand_check = capacity
-#         else:
-#             demand_check = demand                                       # Otherwise whole demand is full filled
-#         capacity -= demand_check
-
-#         if capacity > 0:                                                
-#             hour, minute = timestep_converting(optimal_route[i][0] - )
-
-
+    return optimal_route, profit, operation_time
 
 
 if __name__ == "__main__":
-    # --------------------------------------------------------
-    # 1) Sanity‐check: print marge‐berekeningen vánuit de hub
-    t   = 8
-    hub = hub_index
-    # saniteits‐check: marge‐berekening na revenue‐aanpassing
-    print("=== MARGE‐CHECK EHAM → j @ uur 4 ===")
-    t = 4
-    for k in K:
-        for j in action_possible(hub_index, k):
-            if j == hub_index: 
-                continue
-            # bereken flow incl. load‐factor
-            flow, _ = get_flow(2, j, 4, 0.8*s[k], demand_dic)
-            rev  = revenue_function(hub_index, j, flow)
-            cost = operating_costs(hub_index, j, k)
-            print(f"Type{k+1} → {airports[j]} : flow={flow:.2f}, rev={rev:.0f} €, cost={cost:.0f} € => marge={rev-cost:.0f} €")
-    print("=== EINDE MARGE‐CHECK ===\n")
-
-    # 2) Daarna pas roep je DP aan
+    # Kies een aircraft‐type (bv. 0, 1 of 2)
     ac_type = 2
-    action_matrix, profit_matrix = dynamic_programming(ac_type, demand_dic)
 
-    # 3) En je schedule‐functie
-    route, profit, op_time = scheduel(ac_type, action_matrix, profit_matrix, demand_dic)
-    print("Optimale vliegroute:", route)
-    print("Geprognosticeerde profit:", profit, "€")
-    print("Totale blocktijd:", op_time, "min")
+    # 1) Voer DP uit
+    action_matrix, profit_matrix = dynamic_programming(ac_type)
+
+    # 2) Simuleer je optimale route
+    route, profit, block = scheduel(ac_type, action_matrix, profit_matrix)
+
+    print("Optimale route (ts, loc):", route)
+    print(f"Verwachte profit = €{profit:.2f}")
+    print(f"Totale block‐tijd = {block:.1f} min")
