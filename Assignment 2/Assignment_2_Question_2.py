@@ -249,7 +249,7 @@ def operating_costs(orgin, destination, aircraft_type):
     C_time = C_t * (d[orgin, destination] / Speed)
     C_fuel = ((C_f * 1.42 / 1.5) * d[orgin, destination])
 
-    calculate_operating_cost = (C_fixed + C_time + C_fuel) #(Toegevoegd om het weer runnend te krijgen)
+    calculate_operating_cost = (C_fixed + C_time + C_fuel) 
 
     return calculate_operating_cost
 
