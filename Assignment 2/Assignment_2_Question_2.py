@@ -117,7 +117,7 @@ K = range(len(df_aircraft))                 # Set of aircrafts; k in K
 ac = len(df_aircraft)                       # Total amount of aircrafts
 
 
-d = np.zeros((n, n))                        # Distance between i and j
+d = np.zeros((n, n))                        # Distance between i and j #dit is dubbel dus kan eruit
 for i in N:
     for j in N:
         d[i, j] = dij[i, j]
