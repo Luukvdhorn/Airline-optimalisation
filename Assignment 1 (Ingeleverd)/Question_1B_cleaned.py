@@ -370,13 +370,14 @@ Ck_ij = np.zeros((n, n, ac))                #tOTAL OPERARION COST PER LEG (WITH 
 for k in K:
     for i in N:
         for j in N:
-            Ck_ij[i, j, k] = (C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]) * 0.7
+            #Ck_ij[i, j, k] = (C[k] + C_Tij[i, j, k] + C_Fij[i, j, k]) * 0.7
             
-            #if i != j:
-             #   Ck_ij[i, j, k] = CF[k] + C_Tij[i, j, k] + C_Fij[i, j, k]*0.7
-            #else:
-             #   Ck_ij[i, j, k] = 0
-             #Foutje denk ik, we hebben fixed cost toegevoegd ook als de vertrek en departure gelijk was
+            if i != j:
+                Ck_ij[i, j, k] = CF[k] + C_Tij[i, j, k] + C_Fij[i, j, k]*0.7
+            else:
+               Ck_ij[i, j, k] = 0
+            #Foutje denk ik, we hebben fixed cost toegevoegd ook als de vertrek en departure gelijk was
+print(Ck_ij)
 
 a = {}                                  #BIG M CONSTRAIN FOR RUNWAYS
 for i in N:

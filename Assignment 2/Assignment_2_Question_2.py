@@ -55,6 +55,7 @@ dij = np.zeros((n, n))
 for i in range(n):
     for j in range(n):
         dij[i, j] = distance(latitudes[i], longitudes[i], latitudes[j], longitudes[j])
+print(dij[2,3])
 
 #DEMAND IMPORT
 demand_start_row = icao_row + 7
@@ -109,39 +110,6 @@ for i in range(n):
             H[i, t] = float(cell) if cell is not None else 0
         except:
             H[i, t] = 0
-
-
-
-# veronderstel dat je dit al hebt:
-# airports = [...]       # lijst van ICAO-codes
-# D        = np.ndarray  # shape (n,n), daily demand per route
-# H        = np.ndarray  # shape (n,24), hour coefficients per airport
-
-#CALCULATION HOURLY DEMAND --> even herschrijven zodat meer een geheel wordt/geen chat
-
-# n, T = D.shape[0], H.shape[1]
-# hub_idx = airports.index('EHAM')   # index van Amsterdam
-
-# # 1) hub_arr[i,t] = D[i,hub] * H[i,t]
-# hub_arr = D[:, hub_idx][:, None] * H
-
-# # 2) hub_dep[j,t] = D[hub,j] * H[hub,t]
-# hub_dep = np.outer(D[hub_idx, :], H[hub_idx, :])
-
-# # 3) geen self-loops
-# hub_arr[hub_idx, :] = 0
-# hub_dep[hub_idx, :] = 0
-
-# # 4) optioneel: zet in DataFrame voor mooi overzicht
-# hours = [f'Uur_{t}' for t in range(T)]
-# df_arr = pd.DataFrame(hub_arr, index=airports, columns=hours) # zou dit niet doen... is niet echt nodig namelijk
-# df_dep = pd.DataFrame(hub_dep, index=airports, columns=hours)
-
-# print("=== Demand for flights that arive in EHAM, given hour is departure time in orgin ===")
-# print(df_dep)
-# print("\n=== Demand for flights that depart from EHAM ===")
-# print(df_dep)
-
 
 # DATA IMPORT
 N = range(len(airports))                    # Set of airports; i, j in N
@@ -198,19 +166,6 @@ for k in K:
     cl[k] = df_aircraft['Lease Cost [€/day]'].iloc[k]
     
 
-# C_fix = np.zeros(ac)                            #COST FIXED OPERATING
-# for k in K:
-#     C_fix[k] = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'].iloc[k]
-    
-
-# CT = np.zeros(ac)                           #TIME COST PARAMETER
-# for k in K:
-#     CT[k] = df_aircraft['Cost per Hour'].iloc[k]
-
-# CF = np.zeros(ac)                           #FUEL COST PARAMETER
-# for k in K:
-#     CF[k] = df_aircraft['Fuel Cost Parameter'].iloc[k]   
-
 C_fix = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'].values
 CT    = df_aircraft['Cost per Hour'].values
 CF    = df_aircraft['Fuel Cost Parameter'].values
@@ -226,9 +181,6 @@ for i in N:
                 a[i,j,k] = 10000
             else:
                 a[i,j,k] = 0
-
-# g = np.ones(n)                      #HUB IS AMSTERDAM 
-# g[hub_index] = 0 #hebben we dit nog nodig?
 
 LF = 0.80               # van 0.75 naar 0.80
 
@@ -285,14 +237,6 @@ def timestep_converting(timestep):
 #TEST convert timestep to tijdstip voor timetable: LET OP: step 1 = 00:00 
 print(f'test time= {timestep_converting(3)}')
 
-
-#TO do:
-
-#denk dat het handig is om de berekeningen die we eerder doen wel om te schrijven naar functies, dat is makkelijker met aanroepen
-
-#demand function
-
-#cost function
 def operating_costs(orgin, destination, aircraft_type):
     
     C_t = CT[aircraft_type]
@@ -302,14 +246,14 @@ def operating_costs(orgin, destination, aircraft_type):
     C_fixed = C_fix[aircraft_type]
     if orgin == destination:                                    # Heb even toegevoegd dat als het vliegtuig niet tussen airports gaat fixed cost ook 0 zijn, want staat stil
         C_fixed = 0
-    C_time = C_t * d[orgin, destination] / Speed
+    C_time = C_t * (d[orgin, destination] / Speed)
     C_fuel = ((C_f * 1.42 / 1.5) * d[orgin, destination])
 
-    calculate_operating_cost = C_fixed + C_time + C_fuel
+    calculate_operating_cost = (C_fixed + C_time + C_fuel) #(Toegevoegd om het weer runnend te krijgen)
 
     return calculate_operating_cost
 
-print(f'Operation cost €{operating_costs(2, 7, 1):.2f}')
+print(f'Operation cost €{operating_costs(2, 3, 0):.2f}')
             
 #TEST OM ALLE OPERATING COST TE PRINTEN (als de vliegtuigen groter worden wordt ook cost hoger ;), ook gecheckt met oude manier, zijn gelijk.
 #k = 1 
@@ -318,13 +262,11 @@ print(f'Operation cost €{operating_costs(2, 7, 1):.2f}')
 
 #revenue function
 def revenue_function(orgin, destination, flow):
-    revenue = (5.9 * d[orgin, destination]**(-0.76) + 0.043) * flow
+    revenue = (5.9 * d[orgin, destination]**(-0.76) + 0.043)* d[orgin, destination] * flow 
     return revenue
 
-#Hier moet later wellicht nog de passagiers per time step bij? Maar dat weet ik nu niet zo goed. 
-# Heb flow toegevoegd, dit fikst dat. In Dynamic programming word flow als goed is bepaald.
 
-print(f'Revenue €{revenue_function(2, 3, 10):.2f}')
+print(f'Revenue €{revenue_function(2, 3, 45*0.8):.2f}')
 
 # DACHT MAAK ER EEN DICONARY VAN WANT DAN KAN JE UITEINDELIJK DAAR DE GEVLOGEN REIZIGERS VANAF TREKKEN HAD DAT EERST OOK NIET
 demand_dic = {}                                                 # Create dictonary from demand. Then will be easier to update demand later
@@ -333,19 +275,20 @@ for i in range(n):
         demand_dic[(i,j)] = {}
         for t in range(24):
             demand_dic[(i,j)][t] = D[i,j] * H[i,t]
+            
+            
+# def usable_demand(origin, destination, hour, demand_dic):
+#     demand_options = {}
+#     for i in (0, 1, 2):
+#         t = hour - i
+#         if t < 0:
+#             continue
+#         rem = demand_dic.get((origin, destination), {}).get(t, 0)
+#         if rem > 0:
+#             demand_options[t] = rem
+#     return demand_options
 
-def usable_demand(origin, destination, hour, demand_dic):
-    demand_options = {}
-    for i in (0, 1, 2):
-        t = hour - i
-        if t < 0:
-            continue
-        rem = demand_dic.get((origin, destination), {}).get(t, 0)
-        if rem > 0:
-            demand_options[t] = rem
-    return demand_options
-
-print(f'Demand is {usable_demand(1, 2, 12, demand_dic)}')
+# print(f'Demand is {usable_demand(1, 2, 12, demand_dic)}')
 
 
 # NIEUWE PORBEERSELS VOOR DEMAND VIA CHAT
@@ -401,6 +344,7 @@ def potential_flow(origin, destination, hour, capacity):
     return min(capacity, total)
 
 
+
 # HOE IK EEERST DEMAND HAD GEDAAN
 # def initial_demand(orgin, destination, hour):     # DIT WAS ZO VAN DIT KRIJG JE UIT GEWOON INEZEN
 #     total_demand = D[orgin, destination]
@@ -416,9 +360,6 @@ def potential_flow(origin, destination, hour, capacity):
 
 # print(f'Demand with 2 previous time slots is {usable_demand(1, 2, 5)}')
 
-
-#dynamic programming
-
 def dynamic_programming(aircraft_type, demand_dic):
     total_steps = 24 * 10           # Amount of steps in the day
 
@@ -429,7 +370,7 @@ def dynamic_programming(aircraft_type, demand_dic):
         current_time_step = total_steps - (i+1)                 # Starts at the end, but the very last is already determined
         current_time = current_time_step * 6
 
-        if current_time_step % 60 == 0:
+        if current_time_step % 10 == 0:
             print(current_time_step)                            # Control for if the function is going trough all time steps
         
         for j in range(len(airports)):
@@ -459,7 +400,7 @@ def dynamic_programming(aircraft_type, demand_dic):
                      
                      opertion_cost = operating_costs(j, k, aircraft_type)
                      current_hour, current_min = timestep_converting(current_time_step)
-                     cap = 0.8 * s[aircraft_type]
+                     cap = 0.8 * s[aircraft_type]                                                 
                      flow = potential_flow(j, k, current_hour, cap)         # HIER VOOR DEMAND DINGEN VERANDERT.
                      revenue = revenue_function(j, k, flow)
                      profit = revenue - opertion_cost
@@ -470,8 +411,8 @@ def dynamic_programming(aircraft_type, demand_dic):
                     best_solution = current_solution
                     best_action = k
 
-                action_matrix[j][current_time_step] = best_action
-                profit_matrix[j][current_time_step] = best_solution
+            action_matrix[j][current_time_step] = best_action
+            profit_matrix[j][current_time_step] = best_solution
 
     return action_matrix, profit_matrix
 
@@ -508,6 +449,8 @@ def scheduel(aircraft_type, action_matrix, profit_matrix, demand_dic):
     op_time         = 0
     total_steps     = 24 * 10
 
+    flows_per_segment = []
+
     # werk op een diepe kopie zodat originele demand_dic heel blijft
     remaining_demand = copy.deepcopy(demand_dic)
 
@@ -530,10 +473,8 @@ def scheduel(aircraft_type, action_matrix, profit_matrix, demand_dic):
             # bepaal flow én werk de vraag bij
             cap = 0.8 * s[aircraft_type]
             hour, _ = timestep_converting(time_step)
-            flown, remaining_demand = get_flow(
-                current_airport, next_airport, hour, cap, remaining_demand
-            )
-
+            flown, remaining_demand = get_flow(current_airport, next_airport, hour, cap, remaining_demand)
+            flows_per_segment.append(flown)
             optimal_route.append([next_time_step, next_airport])
 
         # update voor de volgende iteratie
@@ -542,7 +483,7 @@ def scheduel(aircraft_type, action_matrix, profit_matrix, demand_dic):
 
     # bereken de totale profit (lease kost aftrekken)
     profit = profit_matrix[hub_index][0] - cl[aircraft_type]
-    return optimal_route, profit, op_time
+    return optimal_route, profit, op_time, flows_per_segment
 
 
 # HIER WAS IK BEZIG MET DEMAND UPDATE NADAT ER EEN VLUCHT GEKOZEN IS
@@ -592,7 +533,83 @@ if __name__ == "__main__":
     action_matrix, profit_matrix = dynamic_programming(ac_type, demand_dic)
 
     # 3) En je schedule‐functie
-    route, profit, op_time = scheduel(ac_type, action_matrix, profit_matrix, demand_dic)
+    route, profit, op_time, flows_per_segment  = scheduel(ac_type, action_matrix, profit_matrix, demand_dic)
     print("Optimale vliegroute:", route)
     print("Geprognosticeerde profit:", profit, "€")
     print("Totale blocktijd:", op_time, "min")
+
+def translate_solution_dp(solution_dict, Airports):
+    translated_schedules = {}
+
+    for route_name, route_details in solution_dict.items():
+        routing = route_details["Routing"]
+        aircraft_type = route_details["Aircraft type"]
+        profit = route_details["Profit"]
+        utilisation_time = route_details["Utilisation time"]
+        flows = route_details.get("Flow", [0]*len(routing))
+        translated_route = []
+
+        for i in range(1, len(routing)):
+            dep_time_step, origin = routing[i - 1]
+            arr_time_step, destination = routing[i]
+
+            if destination == -1:
+                break
+
+            # Vertrektijd
+            dep_minutes = dep_time_step * 6
+            dep_day = dep_minutes // 1440 + 1
+            dep_hour = (dep_minutes % 1440) // 60
+            dep_minute = dep_minutes % 60
+
+            # Aankomsttijd (optioneel maar netjes)
+            arr_minutes = arr_time_step * 6
+            arr_day = arr_minutes // 1440 + 1
+            arr_hour = (arr_minutes % 1440) // 60
+            arr_minute = arr_minutes % 60
+
+            translated_route.append({
+                "From": Airports[origin],
+                "To": Airports[destination],
+                "Departure": f"Day {dep_day}, {dep_hour:02}:{dep_minute:02}",
+                "Arrival": f"Day {arr_day}, {arr_hour:02}:{arr_minute:02}",
+                "Passengers": flows[i-1]
+            })
+
+        translated_schedules[route_name] = {
+            "Aircraft Type": aircraft_type,
+            "Profit": round(profit, 2),
+            "Utilisation Time (minutes)": round(utilisation_time, 2),
+            "Route": translated_route
+        }
+
+    return translated_schedules
+
+route, profit, op_time, flows_per_segment = scheduel(ac_type, action_matrix, profit_matrix, demand_dic)
+
+solution_dict = {
+    "Route_1": {
+        "Routing": route,
+        "Aircraft type": ac_type,
+        "Profit": profit,
+        "Utilisation time": op_time,
+        "Flow": flows_per_segment
+    }
+}
+translated = translate_solution_dp(solution_dict, airports)
+
+for route_name, details in translated.items():
+    print(route_name)
+    print(f"  Aircraft Type: {details['Aircraft Type']}")
+    print(f"  Profit: {details['Profit']}")
+    print(f"  Utilisation Time (minutes): {details['Utilisation Time (minutes)']}")
+    print("  Route:")
+    for leg in details["Route"]:
+        print(
+            f"    From {leg['From']} to {leg['To']}, "
+            f"Departure: {leg['Departure']}, Arrival: {leg['Arrival']}, "
+            f"Passengers: {leg['Passengers']}"
+        )
+    print("-" * 40)
+
+
