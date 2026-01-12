@@ -4,7 +4,7 @@ import openpyxl
 import math
 
 # --- Data Import ---
-wb = openpyxl.load_workbook("Assignment 2/DemandGroup40.xlsx", data_only=True)
+wb = openpyxl.load_workbook("Assignment 2/DemandGroup12.xlsx", data_only=True)
 ws = wb.active
 
 icao_row = 5    
@@ -258,6 +258,7 @@ iteration = 0
 
 # Teller hoeveel vliegtuigen per type zijn ingezet
 used_ac_count = np.zeros(len(Fleet), dtype=int)
+total_profit = 0  # Voor cumulatieve winst
 
 while any(available_ac > 0):
     profits = np.full(n_ac, -1e9)
@@ -272,12 +273,12 @@ while any(available_ac > 0):
             profits[k] = p
             ut_time[k] = t_block
 
-    # Zet winst op -1e9 voor vliegtuigen met te lage block time
+    # Winst op 0 zetten voor vliegtuigen die te weinig bloktijd hebben
     for k in range(n_ac):
         if ut_time[k] < 6*60:
             profits[k] = -1e9
 
-    print("Iteration: {}" .format(iteration), profits, available_ac)
+    print(f"Iteration: {iteration} - Profits: {profits}, Available AC: {available_ac}")
 
     if np.all(profits < 0):
         print("Geen rendabele vluchten meer, stoppen.")
@@ -288,6 +289,7 @@ while any(available_ac > 0):
     demand = d_new 
     available_ac[k_best] -= 1
     used_ac_count[k_best] += 1
+    total_profit += p
     total_passengers_transported += sum(flown)
     solution_dict[f"Route {iteration}"] = {"Aircraft type": k_best, "Profit": p,
                                           "Utilization": t_block,
@@ -297,9 +299,38 @@ while any(available_ac > 0):
     print(f"Remaining demand sum: {np.sum(demand):.1f}")
     print(f"Total passengers transported so far: {total_passengers_transported:.1f}")
 
-    iteration +=1
+    iteration += 1
 
-# Print na planning hoeveel vliegtuigen zijn ingezet per type
+print(f"\nTotale winst over alle vluchten: {total_profit:.2f} euro")
 print("\n===== Gebruik van vliegtuigen per type =====")
 for idx, ac_name in enumerate(df_aircraft.index):
     print(f"{ac_name}: {used_ac_count[idx]} gebruikt van {Fleet[idx]} beschikbaar")
+
+import pandas as pd
+import numpy as np
+
+# Aannemende dat `D` is originele vraag (2D matrix n x n),
+# en `demand` is huidige vraag (3D matrix n x n x tijdstappen)
+
+# Som van resterende vraag per route over alle uren:
+resterend_per_route = np.sum(demand, axis=2)
+
+# Totaal vervoerd per route
+vervoerd_per_route = D - resterend_per_route
+
+
+# Maak het overzichtelijk als DataFrame met luchthavencodes
+df_orig = pd.DataFrame(D, index=airports, columns=airports)
+df_restant = pd.DataFrame(resterend_per_route, index=airports, columns=airports)
+df_vervoerd = pd.DataFrame(vervoerd_per_route, index=airports, columns=airports)
+
+print("\nOriginele vraag per route (passagiers/week):")
+print(df_orig.round(1))
+
+print("\nResterende vraag per route na planning:")
+print(df_restant.round(1))
+
+print("\nVervoerde passagiers per route:")
+print(df_vervoerd.round(1))
+tot_vervoerd = np.sum(D) - np.sum(resterend_per_route)
+print(f'Totaal vervoerd passagiers: {tot_vervoerd:.1f}')
