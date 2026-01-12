@@ -332,9 +332,8 @@ print(df_orig.round(1))
 print("\nResterende vraag per route na planning:")
 print(df_restant.round(1))
 
-print("\nVervoerde passagiers per route:")
-print(df_vervoerd.round(1))
-tot_vervoerd = np.sum(D) - np.sum(resterend_per_route)
+
+tot_vervoerd = df_vervoerd.to_numpy().sum() 
 print(f'Totaal vervoerd passagiers: {tot_vervoerd:.1f}')
 
 #MAKING A GRAPH VIA CHATGPT
