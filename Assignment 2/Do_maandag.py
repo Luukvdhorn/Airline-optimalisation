@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import openpyxl
 import math
+import matplotlib.pyplot as plt
+
 
 # --- Data Import ---
 wb = openpyxl.load_workbook("Assignment 2/DemandGroup12.xlsx", data_only=True)
@@ -316,7 +318,7 @@ import numpy as np
 resterend_per_route = np.sum(demand, axis=2)
 
 # Totaal vervoerd per route
-vervoerd_per_route = D - resterend_per_route
+vervoerd_per_route = D*2.5 - resterend_per_route
 
 
 # Maak het overzichtelijk als DataFrame met luchthavencodes
@@ -334,3 +336,59 @@ print("\nVervoerde passagiers per route:")
 print(df_vervoerd.round(1))
 tot_vervoerd = np.sum(D) - np.sum(resterend_per_route)
 print(f'Totaal vervoerd passagiers: {tot_vervoerd:.1f}')
+
+#MAKING A GRAPH VIA CHATGPT
+def add_ground_arcs(route):
+    full_route = []
+    for i in range(len(route) - 1):
+        t0, a0 = route[i]
+        t1, a1 = route[i + 1]
+
+        full_route.append((t0, a0))
+        for t in range(t0 + 1, t1):
+            full_route.append((t, a0))
+    full_route.append(route[-1])
+    return full_route
+
+def timestep_to_label(ts, timestep_duration=6):
+    minutes = ts * timestep_duration
+    h = minutes // 60
+    m = minutes % 60
+    return f"{int(h):02d}:{int(m):02d}"
+
+fig, ax = plt.subplots(figsize=(16, 6))
+ax.set_yticks(range(len(airports)))
+ax.set_yticklabels(airports)
+ax.set_ylim(-1, len(airports))
+
+timestep_duration = 6
+total_timesteps = 24*60 // timestep_duration
+
+minor_ticks = range(0, total_timesteps + 1, 2*60 // timestep_duration)
+ax.set_xlim(0, total_timesteps)
+ax.set_xticks([])
+ax.set_xticks(minor_ticks, minor=True)
+ax.set_xticklabels([timestep_to_label(t) for t in minor_ticks], minor=True)
+ax.tick_params(axis='x', which='minor', labelsize=8, length=5)
+
+colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'gray']
+
+for idx, (route_name, sched) in enumerate(solution_dict.items()):
+    route = sched["Route"]
+    ac_type = sched["Aircraft type"]
+    expanded_route = add_ground_arcs(route)
+
+    times = [step[0] for step in expanded_route]
+    airport_ids = [step[1] for step in expanded_route]
+    ac_count_idx = idx 
+    color = colors[ac_count_idx % len(colors)]
+    ax.plot(times, airport_ids, color=color, label=f"{route_name} - AC type {ac_type}")
+
+ax.set_xlabel("Time")
+ax.set_ylabel("Airports")
+ax.grid()
+ax.legend()
+plt.title("Aircraft Timetable")
+plt.tight_layout()
+plt.show()
+
