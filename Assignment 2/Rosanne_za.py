@@ -154,6 +154,7 @@ for k in K:
 Fleet = np.zeros(ac)                                                      #Fleettypes
 for k in K:
     Fleet[k] = df_aircraft['Fleet'].iloc[k]
+print(f'De Fleet is {Fleet}')
 
 #COSTS 
 
@@ -253,7 +254,7 @@ def operating_costs(origin, destination, aircraft_type):
     C_time = C_t * (d[origin, destination] / Speed)
     C_fuel = ((C_f * 1.42 / 1.5) * d[origin, destination])
 
-    calculate_operating_cost = (C_fixed + C_time + C_fuel) #(Toegevoegd om het weer runnend te krijgen)
+    calculate_operating_cost = (C_fixed + C_time + C_fuel)      # (Toegevoegd om het weer runnend te krijgen)
 
     return calculate_operating_cost
 
@@ -311,17 +312,16 @@ def capture_demand(origin, destination, timestep, aircraft_type, dem_hour, verbo
         remaining_capacity -= demand_taken
         flow += demand_taken
 
-        if verbose:
-            print(f"Hour {h}: taken={demand_taken:.1f}, remaining={dem_hour[origin, destination, h]:.1f}")
+        # if verbose:
+        #     print(f"Hour {h}: taken={demand_taken:.1f}, remaining={dem_hour[origin, destination, h]:.1f}")
 
         if remaining_capacity <= 0:
             break
 
-    if verbose:
-        print(f"Total passengers captured for {airports[origin]} -> {airports[destination]} at timestep {timestep}: {flow:.1f}\n")
+    # if verbose:
+    #     print(f"Total passengers captured for {airports[origin]} -> {airports[destination]} at timestep {timestep}: {flow:.1f}\n")
 
     return flow, dem_hour
-
 
 
 def dynamic_programming(aircraft_type, demand_dic):
@@ -334,8 +334,8 @@ def dynamic_programming(aircraft_type, demand_dic):
         current_time_step = total_steps - (i+1)                 # Starts at the end, but the very last is already determined
         current_time = current_time_step * 6
 
-        if current_time_step % 10 == 0:
-            print(current_time_step)                            # Control for if the function is going trough all time steps
+        # if current_time_step % 10 == 0:
+        #     print(current_time_step)                            # Control for if the function is going trough all time steps
         
         for j in range(len(airports)):
             best_action = -1                                    # Set base for action value, if action is  chosen it will get a positive value
@@ -369,7 +369,7 @@ def dynamic_programming(aircraft_type, demand_dic):
                      expected_demand = 0
                      for h in [current_hour, current_hour - 1, current_hour - 2]:
                         if h >= 0:
-                            expected_demand += dem_hour[j, k, h]
+                            expected_demand += demand_dic[j, k, h]
 
                      flow = min(capacity, expected_demand)
 
@@ -440,10 +440,10 @@ def schedule(aircraft_type, action_matrix, profit_matrix, dem_hour):
 
             flows_per_segment.append(flown)
             optimal_route.append((next_time_step, next_airport))
-            print(
-                f"FLIGHT | AC {aircraft_type} | "
-                f"{airports[current_airport]} -> {airports[next_airport]} | "
-                f"t={time_step} | bt={bt:.1f} min | flow={flown:.0f}")
+            # print(
+            #     f"FLIGHT | AC {aircraft_type} | "
+            #     f"{airports[current_airport]} -> {airports[next_airport]} | "
+            #     f"t={time_step} | bt={bt:.1f} min | flow={flown:.0f}")
 
         # update state
         current_airport = next_airport
@@ -458,116 +458,164 @@ def schedule(aircraft_type, action_matrix, profit_matrix, dem_hour):
     if op_time < min_block_time:
         profit = -1e9  # maak oplossing extreem ongunstig
 
-    return optimal_route, profit, op_time, flows_per_segment
+    return optimal_route, profit, op_time, flows_per_segment, remaining_demand
 
 
-#=========== Build timetable with revenue, cost, profit ==========
+# Pre process
+demand = dem_hour
+available_ac = list(Fleet)
+solution_dict = {}
+iteration = 0
 
-def timestep_to_time(timestep):
-    minutes = timestep * 6
-    h = minutes // 60
-    m = minutes % 60
-    return f"{int(h):02d}:{int(m):02d}"
+while any(value > 0 for value in Fleet):
+    optimal_route = {aircraft: [] for aircraft in K}
+    optimal_route = {aircraft: [] for aircraft in K}
+    profits = np.zeros(3)
+    ut_time = np.zeros(3)
 
+    for k in [i for i, value in enumerate(available_ac) if value > 0]:
+        state, action = dynamic_programming(k, demand)
+        if k == 0:
+            print(state[1][0])
+        optimal_route[k], profits[k], ut_time[k], flow, x = schedule(k, state, action, demand)
+    
+    print("Iteration: {}" .format(iteration), profits, available_ac)
 
-def build_timetable(all_schedules):
-    """
-    all_schedules: list of dicts with keys:
-        - aircraft_type
-        - route
-        - flows
-    """
-    timetable = []
-    flight_id = 1
-    aircraft_used_count = {k: 0 for k in K}
+    for k in K:
+        if ut_time[k] < 6 * 60:
+            profits[k] = 0
 
-    for sched in all_schedules:
-        ac_type = sched["aircraft_type"]
-        route = sched["route"]
-        flows = sched["flows"]
+    print("Iteration: {}" .format(iteration), profits, available_ac)
 
-        if len(route) > 1:
-            aircraft_used_count[ac_type] += 1
+    if not any(value > 0 for value in profits):
+        break
 
-        flow_idx = 0
-        for i in range(len(route) - 1):
-            dep_step, origin = route[i]
-            arr_step, destination = route[i + 1]
+    k = np.argmax(profits)
 
-            if origin == destination:
-                continue  # skip idle steps
+    solution_dict["Route {}" .format(iteration)] = {"Aircraft type": K[k],
+                                                  "Profit": profits[k],
+                                                  "Utilisation time": ut_time[k],
+                                                  "Routing": optimal_route[k]}
+    
+    print("Revenue:", action[hub_index][0],
+      "Lease:", cl[k],
+      "Net:", profits[k])
 
-            flow = flows[flow_idx]
-            flow_idx += 1
+    
+    optimal_route[k], profits[k], ut_time[k], flow, new_demand = schedule(k, state, action, demand)
 
-            # Bereken kosten, revenue en winst
-            rev = revenue_function(origin, destination, flow)
-            cost = operating_costs(origin, destination, ac_type)
-            profit = rev - cost
+    demand = new_demand
 
-            timetable.append({
-                "Flight": flight_id,
-                "Aircraft type": ac_type,
-                "From": airports[origin],
-                "To": airports[destination],
-                "Departure": timestep_to_time(dep_step),
-                "Arrival": timestep_to_time(arr_step),
-                "Passengers": int(round(flow)),
-                "Distance": d[origin, destination],
-                "Revenue (€)": rev,
-                "Cost (€)": cost,
-                "Profit (€)": profit
-            })
+    available_ac[k] -= 1
+    iteration += 1
 
-            flight_id += 1
+# #=========== Build timetable with revenue, cost, profit ==========
 
-    return pd.DataFrame(timetable), aircraft_used_count
+# def timestep_to_time(timestep):
+#     minutes = timestep * 6
+#     h = minutes // 60
+#     m = minutes % 60
+#     return f"{int(h):02d}:{int(m):02d}"
 
 
-def print_timetable(df):
-    print("\n===== DAILY FLIGHT TIMETABLE =====\n")
-    print(df.to_string(index=False))
+# def build_timetable(all_schedules):
+#     """
+#     all_schedules: list of dicts with keys:
+#         - aircraft_type
+#         - route
+#         - flows
+#     """
+#     timetable = []
+#     flight_id = 1
+#     aircraft_used_count = {k: 0 for k in K}
+
+#     for sched in all_schedules:
+#         ac_type = sched["aircraft_type"]
+#         route = sched["route"]
+#         flows = sched["flows"]
+
+#         if len(route) > 1:
+#             aircraft_used_count[ac_type] += 1
+
+#         flow_idx = 0
+#         for i in range(len(route) - 1):
+#             dep_step, origin = route[i]
+#             arr_step, destination = route[i + 1]
+
+#             if origin == destination:
+#                 continue  # skip idle steps
+
+#             flow = flows[flow_idx]
+#             flow_idx += 1
+
+#             # Bereken kosten, revenue en winst
+#             rev = revenue_function(origin, destination, flow)
+#             cost = operating_costs(origin, destination, ac_type)
+#             profit = rev - cost
+
+#             timetable.append({
+#                 "Flight": flight_id,
+#                 "Aircraft type": ac_type,
+#                 "From": airports[origin],
+#                 "To": airports[destination],
+#                 "Departure": timestep_to_time(dep_step),
+#                 "Arrival": timestep_to_time(arr_step),
+#                 "Passengers": int(round(flow)),
+#                 "Distance": d[origin, destination],
+#                 "Revenue (€)": rev,
+#                 "Cost (€)": cost,
+#                 "Profit (€)": profit
+#             })
+
+#             flight_id += 1
+
+#     return pd.DataFrame(timetable), aircraft_used_count
 
 
-#=========== Plan all aircraft and build timetable ==========
-all_schedules = []
+# def print_timetable(df):
+#     print("\n===== DAILY FLIGHT TIMETABLE =====\n")
+#     print(df.to_string(index=False))
 
-for k in K:
-    action_matrix, profit_matrix = dynamic_programming(k, dem_hour)
-    route, profit, op_time, flows = schedule(k, action_matrix, profit_matrix, dem_hour)
 
-    # skip onrendabele aircraft
-    if profit < 0:
-        continue
+# #=========== Plan all aircraft and build timetable ==========
+# all_schedules = []
 
-    # update demand voor volgende aircraft
-    for i, (t, airport) in enumerate(route[:-1]):
-        flown, dem_hour = capture_demand(route[i][1], route[i+1][1], t, k, dem_hour)
+# for k in K:
+#     action_matrix, profit_matrix = dynamic_programming(k, dem_hour)
+#     route, profit, op_time, flows = schedule(k, action_matrix, profit_matrix, dem_hour)
 
-    all_schedules.append({
-        "aircraft_type": k,
-        "route": route,
-        "flows": flows,
-        "profit": profit,
-        "block_time": op_time
-    })
+#     # skip onrendabele aircraft
+#     if profit < 0:
+#         continue
 
-# Build timetable + aircraft usage
-timetable_df, aircraft_used_count = build_timetable(all_schedules)
+#     # update demand voor volgende aircraft
+#     for i, (t, airport) in enumerate(route[:-1]):
+#         flown, dem_hour = capture_demand(route[i][1], route[i+1][1], t, k, dem_hour)
 
-# Print timetable
-print_timetable(timetable_df)
+#     all_schedules.append({
+#         "aircraft_type": k,
+#         "route": route,
+#         "flows": flows,
+#         "profit": profit,
+#         "block_time": op_time
+#     })
 
-# Print totale revenue, kosten en winst
-total_revenue = timetable_df["Revenue (€)"].sum()
-total_cost = timetable_df["Cost (€)"].sum()
-total_profit = timetable_df["Profit (€)"].sum()
+# # Build timetable + aircraft usage
+# timetable_df, aircraft_used_count = build_timetable(all_schedules)
 
-print("\n===== TOTALS =====")
-print(f"Totale revenue: {total_revenue:.0f} €")
-print(f"Totale kosten: {total_cost:.0f} €")
-print(f"Totale winst: {total_profit:.0f} €\n")
+# # Print timetable
+# print_timetable(timetable_df)
 
-print("Aircraft gebruikt per type:")
-for k, count in aircraft_used_count.items():
-    print(f"Type {k+1}: {count} aircraft(s)")
+# # Print totale revenue, kosten en winst
+# total_revenue = timetable_df["Revenue (€)"].sum()
+# total_cost = timetable_df["Cost (€)"].sum()
+# total_profit = timetable_df["Profit (€)"].sum()
+
+# print("\n===== TOTALS =====")
+# print(f"Totale revenue: {total_revenue:.0f} €")
+# print(f"Totale kosten: {total_cost:.0f} €")
+# print(f"Totale winst: {total_profit:.0f} €\n")
+
+# print("Aircraft gebruikt per type:")
+# for k, count in aircraft_used_count.items():
+#     print(f"Type {k+1}: {count} aircraft(s)")
