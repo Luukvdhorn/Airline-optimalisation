@@ -80,9 +80,9 @@ for i in range(n):
         except:
             H[i, t] = 0
 
-print("Sum HourCoefficients per airport (time band spread):")
-for i in range(n):
-    print(f"{airports[i]}: {np.sum(H[i]):.3f}")
+# print("Sum HourCoefficients per airport (time band spread):")
+# for i in range(n):
+#     print(f"{airports[i]}: {np.sum(H[i]):.3f}")
 
 # Calculate demand per hour by spreading weekly demand using hour coefficients
 dem_hour = np.zeros((n, n, T))   # demand per origin-dest-hour
@@ -293,7 +293,7 @@ total_profit = 0  # Voor cumulatieve winst
 
 while any(available_ac > 0):
     profits = np.full(n_ac, -1e8)
-    ut_time = np.zeros(n_ac)
+    #ut_time = np.zeros(n_ac)           # Heb dit uitgezet omdat in schedule al gekeken wordt naar de blocking time
     routes = {}
 
     for k in range(n_ac):
@@ -492,11 +492,11 @@ def add_ground_arcs(route):
     full_route.append(route[-1])
     return full_route
 
-def timestep_to_label(ts, timestep_duration=6):
-    minutes = ts * timestep_duration
-    h = minutes // 60
-    m = minutes % 60
-    return f"{int(h):02d}:{int(m):02d}"
+# def timestep_to_label(ts, timestep_duration=6):
+#     minutes = ts * timestep_duration
+#     h = minutes // 60
+#     m = minutes % 60
+#     return f"{int(h):02d}:{int(m):02d}"
 
 fig, ax = plt.subplots(figsize=(16, 6))
 ax.set_yticks(range(len(airports)))
