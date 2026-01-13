@@ -302,7 +302,7 @@ while any(available_ac > 0):
             r, p, t_block, flown, d_new = schedule(k, action_mat, profit_mat, demand)
             routes[k] = (r, p, t_block, flown, d_new)
             profits[k] = p
-            ut_time[k] = t_block
+            #ut_time[k] = t_block
 
     # for k in range(n_ac):
     #     if ut_time[k] < 6*60:
