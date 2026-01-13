@@ -397,20 +397,23 @@ print(f"Totaal vervoerde passagiers EHAM -> EGLL: {total_passengers:.1f}")
 
 ASK = 0.0
 RPK = 0.0
+
 TOTAL_REVENUE = 0.0
 TOTAL_COST = 0.0
+TOTAL_LEASE = 0.0
 
-for route_name, sched in solution_dict.items():
+for sched in solution_dict.values():
     route = sched["Route"]
     flows = sched["Flows"]
     ac_type = sched["Aircraft type"]
     seats = s[ac_type]
-    total_block_time = sched["Utilization"]
-    route_profit = sched["Profit"]
+
+    TOTAL_LEASE += cl[ac_type]   
 
     for i, passengers in enumerate(flows):
         if passengers <= 0:
             continue
+
         _, origin = route[i]
         _, dest   = route[i+1]
 
@@ -419,11 +422,14 @@ for route_name, sched in solution_dict.items():
         ASK += seats * distance_leg
         RPK += passengers * distance_leg
 
-        if len(flows) > 0:
-            leg_profit_ratio = passengers / sum(flows) 
-            TOTAL_REVENUE += leg_profit_ratio * (route_profit + cl[ac_type])
-            TOTAL_COST += leg_profit_ratio * (route_profit + cl[ac_type]) - leg_profit_ratio * route_profit
+        y = 5.9 * distance_leg**(-0.76) + 0.043
+        revenue_leg = y * distance_leg * passengers
+        TOTAL_REVENUE += revenue_leg
 
+        cost_leg = operating_cost(origin, dest, ac_type)
+        TOTAL_COST += cost_leg
+
+TOTAL_COST += TOTAL_LEASE
 CASK = TOTAL_COST / ASK 
 RASK = TOTAL_REVENUE / ASK 
 YIELD = TOTAL_REVENUE / RPK
@@ -438,10 +444,8 @@ print(f"YIELD : {YIELD:.4f} €/RPK")
 print(f"ANLF  : {ANLF:.3f}")
 print(f"BELF  : {BELF:.3f}")
 print(f"Totaal winst (Profit uit solution_dict): {sum(sched['Profit'] for sched in solution_dict.values()):.2f} €")
-
 print(f"Total revenue: {TOTAL_REVENUE:.2f}")
 print(f"Total costs: {TOTAL_COST:.2f}")
-
 print(f"Totale profit {TOTAL_REVENUE-TOTAL_COST:.2f}")
 
 #MAKING A GRAPH VIA CHATGPT
