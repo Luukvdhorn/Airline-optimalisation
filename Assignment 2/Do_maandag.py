@@ -126,7 +126,8 @@ total_steps = 24 * 10  # 6 min steps in 24h
 
 def timestep_to_hour(timestep):
     total_minutes = timestep * step_minutes
-    return total_minutes // 60
+    hour = total_minutes // 60
+    return hour
 
 def action_possible(stage, ac_type):
     possible = []
@@ -142,7 +143,8 @@ def action_possible(stage, ac_type):
 def block_time(origin, dest, ac_type):
     if origin == dest:
         return 0
-    return 15 + (d[origin,dest] / v[ac_type]) * 60 + TAT[ac_type] + 15
+    bt = 15 + (d[origin,dest] / v[ac_type]) * 60 + TAT[ac_type] + 15
+    return bt
 
 def operating_cost(origin, dest, ac_type):
     if origin == dest:
@@ -150,13 +152,16 @@ def operating_cost(origin, dest, ac_type):
     C_fixed = C_fix[ac_type]
     C_time = CT[ac_type] * (d[origin,dest] / v[ac_type])
     C_fuel = (CF[ac_type] * 1.42 / 1.5) * d[origin,dest]
-    return C_fixed + C_time + C_fuel
+    tot_cost = C_fixed + C_time + C_fuel
+    return tot_cost
 
 def revenue_func(origin, dest, flow):
     if origin == dest:
         return 0
     y = 5.9 * d[origin,dest]**(-0.76) + 0.043
-    return y * d[origin,dest] * flow
+    rev = y * d[origin,dest] * flow
+    return rev
+
 
 def capture_demand(origin, dest, timestep, ac_type, dem_hour):
     hour, _ = divmod(timestep * step_minutes, 60)
@@ -170,9 +175,12 @@ def capture_demand(origin, dest, timestep, ac_type, dem_hour):
         if available <= 0:
             continue
         taken = min(available, remaining_capacity)
-        dem_hour[origin, dest, h] -= taken
-        flow += taken
-        remaining_capacity -= taken
+        taken_int = math.floor(taken)  # Afromen naar beneden, zodat alleen hele passagiers worden meegenomen
+        if taken_int == 0:
+            continue  # als afgerond 0, overslaan
+        dem_hour[origin, dest, h] -= taken_int
+        flow += taken_int
+        remaining_capacity -= taken_int
         if remaining_capacity <= 0:
             break
     return flow, dem_hour
@@ -182,13 +190,13 @@ def dynamic_programming(ac_type, dem_hour):
     action_matrix = np.full((n, total_steps), -1)
 
     # Laatste tijdstip alleen winst op de hub
-    profit_matrix[:, -1] = -1e9
+    profit_matrix[:, -1] = -1e7
     profit_matrix[hub_index, -1] = 0
 
     for t in range(total_steps-2, -1, -1):
         current_hour = timestep_to_hour(t)
         for loc in range(n):
-            best_profit = -1e9
+            best_profit = -1e6
             best_action = -1
 
             if t >= total_steps - 1:
@@ -207,6 +215,7 @@ def dynamic_programming(ac_type, dem_hour):
                     blockt = block_time(loc, dest, ac_type)
                     arrival_time = t + math.ceil(blockt/step_minutes)
                     if arrival_time >= total_steps:
+                        #print(f"[DP] Vlucht van {loc} naar {dest} arriveert buiten planningstijd (arr: {arrival_time}), winst wordt -1e9 gezet")
                         future_profit = -1e9
                     else:
                         future_profit = profit_matrix[dest, arrival_time]
@@ -250,18 +259,26 @@ def schedule(ac_type, action_matrix, profit_matrix, dem_hour):
             break
         total_block_time += bt
         flow, dem_hour = capture_demand(current_pos, next_pos, t, ac_type, dem_hour)
+        
+        revenue_leg = revenue_func(current_pos, next_pos, flow)
+        cost_leg = operating_cost(current_pos, next_pos, ac_type)
+        profit_leg = revenue_leg - cost_leg
+
+        print(f"[SCHEDULE] AC {ac_type}: Vlucht {airports[current_pos]}->{airports[next_pos]} flow={flow:.1f} "
+            f"revenue={revenue_leg:.2f} cost={cost_leg:.2f} profit_leg={profit_leg:.2f}")
+        
         flows.append(flow)
         route.append((t_next, next_pos))
-        #print(f"[SCHEDULE] AC {ac_type}: flown {flow:.1f} pax from {airports[current_pos]} to {airports[next_pos]} at t={t}")
         current_pos = next_pos
         t = t_next
 
-    profit = profit_matrix[hub_index, 0] - cl[ac_type]
     min_block = 6*60
     if total_block_time < min_block:
+        print(f"[SCHEDULE] Aircraft type {ac_type} totale blocktime {total_block_time:.1f} min < minimale blocktijd {min_block} min, winst wordt -1e9 gezet")
         profit = -1e9
+    else:
+        profit = profit_matrix[hub_index, 0] - cl[ac_type]
 
-    #print(f"[SCHEDULE] AC {ac_type} total flown pax: {sum(flows):.1f}")
     return route, profit, total_block_time, flows, dem_hour
 
 # Main loop
@@ -271,27 +288,26 @@ total_passengers_transported = 0
 solution_dict = {}
 iteration = 0
 
-# Teller hoeveel vliegtuigen per type zijn ingezet
 used_ac_count = np.zeros(len(Fleet), dtype=int)
 total_profit = 0  # Voor cumulatieve winst
 
 while any(available_ac > 0):
-    profits = np.full(n_ac, -1e9)
+    profits = np.full(n_ac, -1e8)
     ut_time = np.zeros(n_ac)
     routes = {}
 
     for k in range(n_ac):
         if available_ac[k] > 0:
             action_mat, profit_mat = dynamic_programming(k, demand)
-            r, p, t_block, flown, demand_new = schedule(k, action_mat, profit_mat, demand)
-            routes[k] = (r, p, t_block, flown, demand_new)
+            r, p, t_block, flown, d_new = schedule(k, action_mat, profit_mat, demand)
+            routes[k] = (r, p, t_block, flown, d_new)
             profits[k] = p
             ut_time[k] = t_block
 
-    # Winst op 0 zetten voor vliegtuigen die te weinig bloktijd hebben
-    for k in range(n_ac):
-        if ut_time[k] < 6*60:
-            profits[k] = -1e9
+    # for k in range(n_ac):
+    #     if ut_time[k] < 6*60:
+    #         print(f"[MAIN LOOP] Aircraft type {k} blocktime {ut_time[k]:.1f} min < 360 min, winst wordt -1e9 gezet")
+    #         profits[k] = -1e5
 
     print(f"Iteration: {iteration} - Profits: {profits}, Available AC: {available_ac}")
 
@@ -309,7 +325,7 @@ while any(available_ac > 0):
     solution_dict[f"Route {iteration}"] = {"Aircraft type": k_best, "Profit": p,
                                         "Utilization": t_block,
                                         "Route": r,
-                                        "Flows": flown}   # voeg flown toe
+                                        "Flows": flown}
 
     print(f"[MAIN LOOP] Iteration {iteration}: Added plane type {k_best} with profit {p:.1f}, block time {t_block:.1f} min")
     print(f"Remaining demand sum: {np.sum(demand):.1f}")
@@ -322,33 +338,48 @@ print("\n===== Gebruik van vliegtuigen per type =====")
 for idx, ac_name in enumerate(df_aircraft.index):
     print(f"{ac_name}: {used_ac_count[idx]} gebruikt van {Fleet[idx]} beschikbaar")
 
-import pandas as pd
-import numpy as np
+origin_idx = airports.index("EHAM")
+dest_idx = airports.index("EGLL")
 
-# Aannemende dat `D` is originele vraag (2D matrix n x n),
-# en `demand` is huidige vraag (3D matrix n x n x tijdstappen)
+print("\nResterende vraag per uur van EHAM naar EGLL (na planning):")
+for t in range(T):
+    remaining = demand[origin_idx, dest_idx, t]
+    print(f"Uur {t:02d}: {remaining:.1f} passagiers")
 
-# Som van resterende vraag per route over alle uren:
-resterend_per_route = np.sum(demand, axis=2)
+print("\nResterende vraag per uur van EGLL naar EHAM (na planning):")
+for t in range(T):
+    remaining2 = demand[dest_idx, origin_idx, t]
+    print(f"Uur {t:02d}: {remaining2:.1f} passagiers")
 
-# Totaal vervoerd per route
-vervoerd_per_route = D*2.5 - resterend_per_route
+# De rest van je analyses en visualisaties blijf je gebruiken zoals in je oorspronkelijke code.
+
+# import pandas as pd
+# import numpy as np
+
+# # Aannemende dat `D` is originele vraag (2D matrix n x n),
+# # en `demand` is huidige vraag (3D matrix n x n x tijdstappen)
+
+# # Som van resterende vraag per route over alle uren:
+# resterend_per_route = np.sum(demand, axis=2)
+
+# # Totaal vervoerd per route
+# vervoerd_per_route = D*2.5 - resterend_per_route
 
 
-# Maak het overzichtelijk als DataFrame met luchthavencodes
-df_orig = pd.DataFrame(D, index=airports, columns=airports)
-df_restant = pd.DataFrame(resterend_per_route, index=airports, columns=airports)
-df_vervoerd = pd.DataFrame(vervoerd_per_route, index=airports, columns=airports)
+# # Maak het overzichtelijk als DataFrame met luchthavencodes
+# df_orig = pd.DataFrame(D, index=airports, columns=airports)
+# df_restant = pd.DataFrame(resterend_per_route, index=airports, columns=airports)
+# df_vervoerd = pd.DataFrame(vervoerd_per_route, index=airports, columns=airports)
 
-print("\nOriginele vraag per route (passagiers/week):")
-print(df_orig.round(1))
+# print("\nOriginele vraag per route (passagiers/week):")
+# print(df_orig.round(1))
 
-print("\nResterende vraag per route na planning:")
-print(df_restant.round(1))
+# print("\nResterende vraag per route na planning:")
+# print(df_restant.round(1))
 
 
-tot_vervoerd = df_vervoerd.to_numpy().sum() 
-print(f'Totaal vervoerd passagiers: {tot_vervoerd:.1f}')
+# tot_vervoerd = df_vervoerd.to_numpy().sum() 
+# print(f'Totaal vervoerd passagiers: {tot_vervoerd:.1f}')
 
 def timestep_to_label(ts, timestep_duration=6):
     minutes = ts * timestep_duration
@@ -397,20 +428,23 @@ print(f"Totaal vervoerde passagiers EHAM -> EGLL: {total_passengers:.1f}")
 
 ASK = 0.0
 RPK = 0.0
+
 TOTAL_REVENUE = 0.0
 TOTAL_COST = 0.0
+TOTAL_LEASE = 0.0
 
-for route_name, sched in solution_dict.items():
+for sched in solution_dict.values():
     route = sched["Route"]
     flows = sched["Flows"]
     ac_type = sched["Aircraft type"]
     seats = s[ac_type]
-    total_block_time = sched["Utilization"]
-    route_profit = sched["Profit"]
+
+    TOTAL_LEASE += cl[ac_type]   
 
     for i, passengers in enumerate(flows):
         if passengers <= 0:
             continue
+
         _, origin = route[i]
         _, dest   = route[i+1]
 
@@ -419,11 +453,14 @@ for route_name, sched in solution_dict.items():
         ASK += seats * distance_leg
         RPK += passengers * distance_leg
 
-        if len(flows) > 0:
-            leg_profit_ratio = passengers / sum(flows) 
-            TOTAL_REVENUE += leg_profit_ratio * (route_profit + cl[ac_type])
-            TOTAL_COST += leg_profit_ratio * (route_profit + cl[ac_type]) - leg_profit_ratio * route_profit
+        y = 5.9 * distance_leg**(-0.76) + 0.043
+        revenue_leg = y * distance_leg * passengers
+        TOTAL_REVENUE += revenue_leg
 
+        cost_leg = operating_cost(origin, dest, ac_type)
+        TOTAL_COST += cost_leg
+
+TOTAL_COST += TOTAL_LEASE
 CASK = TOTAL_COST / ASK 
 RASK = TOTAL_REVENUE / ASK 
 YIELD = TOTAL_REVENUE / RPK
@@ -438,10 +475,8 @@ print(f"YIELD : {YIELD:.4f} €/RPK")
 print(f"ANLF  : {ANLF:.3f}")
 print(f"BELF  : {BELF:.3f}")
 print(f"Totaal winst (Profit uit solution_dict): {sum(sched['Profit'] for sched in solution_dict.values()):.2f} €")
-
 print(f"Total revenue: {TOTAL_REVENUE:.2f}")
 print(f"Total costs: {TOTAL_COST:.2f}")
-
 print(f"Totale profit {TOTAL_REVENUE-TOTAL_COST:.2f}")
 
 #MAKING A GRAPH VIA CHATGPT
