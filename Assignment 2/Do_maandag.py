@@ -375,8 +375,8 @@ def print_all_routes(solution_dict, airports, timestep_to_label):
 print_all_routes(solution_dict, airports, timestep_to_label)
 
 # Indexen ophalen van luchthavens EGLL en LFPG
-origin_idx = airports.index("EGLL")
-dest_idx = airports.index("LFPG")
+origin_idx = airports.index("EHAM")
+dest_idx = airports.index("EGLL")
 
 flight_count = 0
 total_passengers = 0
@@ -393,7 +393,7 @@ for sched in solution_dict.values():
                 total_passengers += flows[i]
 
 print(f"Aantal vluchten EGLL -> LFPG: {flight_count}")
-print(f"Totaal vervoerde passagiers EGLL -> LFPG: {total_passengers:.1f}")
+print(f"Totaal vervoerde passagiers EHAM -> EGLL: {total_passengers:.1f}")
 
 ASK = 0.0
 RPK = 0.0
