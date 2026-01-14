@@ -2,10 +2,11 @@ import numpy as np
 import pandas as pd
 import openpyxl
 import math
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
 
 
-# --- Data Import ---
+# ================ Data Import =================
+#Dataset demand data, airport characteristics   
 wb = openpyxl.load_workbook("Assignment 2/DemandGroup40.xlsx", data_only=True)
 ws = wb.active
 
@@ -21,6 +22,7 @@ airports = []
 latitudes = []
 longitudes = []
 
+#Latitude, Longitude and Runway length import
 col = start_col
 while True:
     icao = ws.cell(row=icao_row, column=col).value
@@ -36,22 +38,25 @@ while True:
     runways.append(float(runway))
     col += 1
 
+runway_arrival = np.array(runways)
 n = len(airports)
-RE = 6371.0
 
+
+#Distance formula to construct distance matrix
 def distance(phi_i, lam_i, phi_j, lam_j):
+    RE = 6371.0
     phi_i, phi_j = np.radians(phi_i), np.radians(phi_j)
     lam_i, lam_j = np.radians(lam_i), np.radians(lam_j)
     return 2 * RE * np.arcsin(
-        np.sqrt(np.sin((phi_i - phi_j)/2)**2 + np.cos(phi_i)*np.cos(phi_j)*np.sin((lam_i - lam_j)/2)**2)
-    )
+        np.sqrt(np.sin((phi_i - phi_j)/2)**2 + np.cos(phi_i)*np.cos(phi_j)*np.sin((lam_i - lam_j)/2)**2))
 
 d = np.zeros((n, n))
 for i in range(n):
     for j in range(n):
         d[i, j] = distance(latitudes[i], longitudes[i], latitudes[j], longitudes[j])
 
-# Demand Import
+
+# Demand matrix import
 demand_start_row = icao_row + 7
 demand_start_col = start_col
 
@@ -64,7 +69,7 @@ for i in range(n):
         except:
             D[i,j] = 0
 
-# Hour coefficients import
+# Dataset hour coefficients import
 wb_h = openpyxl.load_workbook("Assignment 2/HourCoefficients.xlsx", data_only=True)
 ws_h = wb_h.active
 
@@ -80,18 +85,15 @@ for i in range(n):
         except:
             H[i, t] = 0
 
-# print("Sum HourCoefficients per airport (time band spread):")
-# for i in range(n):
-#     print(f"{airports[i]}: {np.sum(H[i]):.3f}")
-
-# Calculate demand per hour by spreading weekly demand using hour coefficients
+# Calculate demand per hour by spreading daily demand using hour coefficients
 dem_hour = np.zeros((n, n, T))   # demand per origin-dest-hour
 for i in range(n):
     for j in range(n):
         for t in range(T):
             dem_hour[i, j, t] = D[i, j] * H[i, t]
 
-# Fleet data import
+
+#Dataset Fleet data import
 wb2 = openpyxl.load_workbook("Assignment 2/FleetType.xlsx", data_only=True)
 sheet2 = wb2.active
 
@@ -107,28 +109,33 @@ for row in sheet2.iter_rows(min_row=2, values_only=True):
 
 df_aircraft = pd.DataFrame(data, index=aircraft_names)
 
-# Extract parameters
+
+# Extract parameters from aircraft data 
 s = df_aircraft['Seats'].values
 v = df_aircraft['Speed [km/h]'].values
 ra = df_aircraft['Maximum Range [km]'].values
 RAC = df_aircraft['Runway Required [m]'].values
 TAT = df_aircraft['Average TAT [min]'].values
-Fleet = df_aircraft['Fleet'].values.astype(int)
+fleet = df_aircraft['Fleet'].values.astype(int)
 cl = df_aircraft['Lease Cost [€/day]'].values
 C_fix = df_aircraft['Fixed Operating Cost (Per Fligth Leg)  [€]'].values
 CT = df_aircraft['Cost per Hour'].values
 CF = df_aircraft['Fuel Cost Parameter'].values
 
-runway_arrival = np.array(runways)
 
-step_minutes = 6
-total_steps = 24 * 10  # 6 min steps in 24h
 
+# ================ Parameters and Functions =================
+
+step_minutes = 6        #time step in minutes
+total_steps = 24 * 10   # 6 min steps in 24h
+
+#Function to convert timestep to hour
 def timestep_to_hour(timestep):
     total_minutes = timestep * step_minutes
     hour = total_minutes // 60
     return hour
 
+#Function to check if action fulfils constraints (runway length and range)
 def action_possible(stage, ac_type):
     possible = []
     if stage == hub_index:
@@ -140,12 +147,14 @@ def action_possible(stage, ac_type):
             possible.append(dest)
     return possible
 
+# Function to calculate block time [min] of one flight
 def block_time(origin, dest, ac_type):
     if origin == dest:
         return 0
     bt = 15 + (d[origin,dest] / v[ac_type]) * 60 + TAT[ac_type] + 15
     return bt
 
+# Function to calculate operating cost of one flight 
 def operating_cost(origin, dest, ac_type):
     if origin == dest:
         return 0
@@ -155,6 +164,7 @@ def operating_cost(origin, dest, ac_type):
     tot_cost = C_fixed + C_time + C_fuel
     return tot_cost
 
+# Function to calculate revenue of one flight
 def revenue_func(origin, dest, flow):
     if origin == dest:
         return 0
@@ -162,7 +172,7 @@ def revenue_func(origin, dest, flow):
     rev = y * d[origin,dest] * flow
     return rev
 
-
+# Function to calculate captured demand for a flight (including previous hours)
 def capture_demand(origin, dest, timestep, ac_type, dem_hour):
     hour, _ = divmod(timestep * step_minutes, 60)
     capacity = 0.8 * s[ac_type]
@@ -175,9 +185,9 @@ def capture_demand(origin, dest, timestep, ac_type, dem_hour):
         if available <= 0:
             continue
         taken = min(available, remaining_capacity)
-        taken_int = math.floor(taken)  # Afromen naar beneden, zodat alleen hele passagiers worden meegenomen
+        taken_int = math.floor(taken)  
         if taken_int == 0:
-            continue  # als afgerond 0, overslaan
+            continue 
         dem_hour[origin, dest, h] -= taken_int
         flow += taken_int
         remaining_capacity -= taken_int
@@ -185,11 +195,16 @@ def capture_demand(origin, dest, timestep, ac_type, dem_hour):
             break
     return flow, dem_hour
 
-def dynamic_programming(ac_type, dem_hour):
-    profit_matrix = np.full((n, total_steps), -1e9)
-    action_matrix = np.full((n, total_steps), -1)
 
-    # Laatste tijdstip alleen winst op de hub
+
+# ================ Dynamic Programming and Scheduling =================
+
+# Function for dynamic programming algorithm
+def dynamic_programming(ac_type, dem_hour):
+    profit_matrix = np.full((n, total_steps), -1e9)   # Storage space for profit
+    action_matrix = np.full((n, total_steps), -1)     # Storage of action taken
+
+    # Last run only profitable if it goes to the hub
     profit_matrix[:, -1] = -1e7
     profit_matrix[hub_index, -1] = 0
 
@@ -215,7 +230,6 @@ def dynamic_programming(ac_type, dem_hour):
                     blockt = block_time(loc, dest, ac_type)
                     arrival_time = t + math.ceil(blockt/step_minutes)
                     if arrival_time >= total_steps:
-                        #print(f"[DP] Vlucht van {loc} naar {dest} arriveert buiten planningstijd (arr: {arrival_time}), winst wordt -1e9 gezet")
                         future_profit = -1e9
                     else:
                         future_profit = profit_matrix[dest, arrival_time]
@@ -239,6 +253,7 @@ def dynamic_programming(ac_type, dem_hour):
 
     return action_matrix, profit_matrix
 
+# Function to schedule flights based on action and profit matrices
 def schedule(ac_type, action_matrix, profit_matrix, dem_hour):
     route = [(0, hub_index)]
     current_pos = hub_index
@@ -250,7 +265,7 @@ def schedule(ac_type, action_matrix, profit_matrix, dem_hour):
         next_pos = int(action_matrix[current_pos, t])
         if next_pos < 0 or next_pos >= n:
             break
-        if next_pos == current_pos:
+        if next_pos == current_pos:            
             t += 1
             continue
         bt = block_time(current_pos, next_pos, ac_type)
@@ -281,19 +296,25 @@ def schedule(ac_type, action_matrix, profit_matrix, dem_hour):
 
     return route, profit, total_block_time, flows, dem_hour
 
-# Main loop
+
+
+
+
+
+# ================ Main Loop to build optimal schedule ==================
+
+# Main loop to build the flight schedule
 demand = dem_hour.copy()
-available_ac = Fleet.copy()
+available_ac = fleet.copy()
 total_passengers_transported = 0
 solution_dict = {}
 iteration = 0
 
-used_ac_count = np.zeros(len(Fleet), dtype=int)
+used_ac_count = np.zeros(len(fleet), dtype=int)
 total_profit = 0  # Voor cumulatieve winst
 
 while any(available_ac > 0):
     profits = np.full(n_ac, -1e8)
-    #ut_time = np.zeros(n_ac)           # Heb dit uitgezet omdat in schedule al gekeken wordt naar de blocking time
     routes = {}
 
     for k in range(n_ac):
@@ -302,17 +323,12 @@ while any(available_ac > 0):
             r, p, t_block, flown, d_new = schedule(k, action_mat, profit_mat, demand)
             routes[k] = (r, p, t_block, flown, d_new)
             profits[k] = p
-            #ut_time[k] = t_block
 
-    # for k in range(n_ac):
-    #     if ut_time[k] < 6*60:
-    #         print(f"[MAIN LOOP] Aircraft type {k} blocktime {ut_time[k]:.1f} min < 360 min, winst wordt -1e9 gezet")
-    #         profits[k] = -1e5
-
+    # Print status per iteration
     print(f"Iteration: {iteration} - Profits: {profits}, Available AC: {available_ac}")
 
     if np.all(profits < 0):
-        print("Geen rendabele vluchten meer, stoppen.")
+        print("No profitable flights left, stop.")
         break
 
     k_best = np.argmax(profits)
@@ -333,54 +349,19 @@ while any(available_ac > 0):
 
     iteration += 1
 
-print(f"\nTotale winst over alle vluchten: {total_profit:.2f} euro")
-print("\n===== Gebruik van vliegtuigen per type =====")
+print(f"\nTotal profit for all flights: {total_profit:.2f} euro")
+
+
+
+
+
+# ================ Print results and Analysis ==================
+
+print("\n===== Used aircraft per type =====")
 for idx, ac_name in enumerate(df_aircraft.index):
-    print(f"{ac_name}: {used_ac_count[idx]} gebruikt van {Fleet[idx]} beschikbaar")
+    print(f"{ac_name}: {used_ac_count[idx]} used of {fleet[idx]} available")
 
-origin_idx = airports.index("EHAM")
-dest_idx = airports.index("EGLL")
-
-print("\nResterende vraag per uur van EHAM naar EGLL (na planning):")
-for t in range(T):
-    remaining = demand[origin_idx, dest_idx, t]
-    print(f"Uur {t:02d}: {remaining:.1f} passagiers")
-
-print("\nResterende vraag per uur van EGLL naar EHAM (na planning):")
-for t in range(T):
-    remaining2 = demand[dest_idx, origin_idx, t]
-    print(f"Uur {t:02d}: {remaining2:.1f} passagiers")
-
-# De rest van je analyses en visualisaties blijf je gebruiken zoals in je oorspronkelijke code.
-
-# import pandas as pd
-# import numpy as np
-
-# # Aannemende dat `D` is originele vraag (2D matrix n x n),
-# # en `demand` is huidige vraag (3D matrix n x n x tijdstappen)
-
-# # Som van resterende vraag per route over alle uren:
-# resterend_per_route = np.sum(demand, axis=2)
-
-# # Totaal vervoerd per route
-# vervoerd_per_route = D*2.5 - resterend_per_route
-
-
-# # Maak het overzichtelijk als DataFrame met luchthavencodes
-# df_orig = pd.DataFrame(D, index=airports, columns=airports)
-# df_restant = pd.DataFrame(resterend_per_route, index=airports, columns=airports)
-# df_vervoerd = pd.DataFrame(vervoerd_per_route, index=airports, columns=airports)
-
-# print("\nOriginele vraag per route (passagiers/week):")
-# print(df_orig.round(1))
-
-# print("\nResterende vraag per route na planning:")
-# print(df_restant.round(1))
-
-
-# tot_vervoerd = df_vervoerd.to_numpy().sum() 
-# print(f'Totaal vervoerd passagiers: {tot_vervoerd:.1f}')
-
+# Function to convert timestep to label for printing
 def timestep_to_label(ts, timestep_duration=6):
     minutes = ts * timestep_duration
     h = minutes // 60
@@ -388,44 +369,47 @@ def timestep_to_label(ts, timestep_duration=6):
     return f"{int(h):02d}:{int(m):02d}"
 
 def print_all_routes(solution_dict, airports, timestep_to_label):
-    print("\n=== Overzicht van alle geplande vluchten per vliegtuig ===")
+    print("\n=== Routes for optimal schedule ===")
+
     for route_name, sched in solution_dict.items():
-        route = sched["Route"]           # lijst van (tijd, luchthaven_idx)
+        route = sched["Route"]                
         ac_type = sched["Aircraft type"]
-        flown = sched.get("Flows", None) # je moet flows opslaan om deze te kunnen tonen
+        flown = sched.get("Flows", [])
 
         print(f"\n{route_name} - Aircraft type {ac_type}:")
-        for i in range(len(route)-1):
-            dep_time, origin = route[i]
-            arr_time, dest = route[i+1]
-            passengers = 0
-            if flown is not None and i < len(flown):
-                passengers = flown[i]
-            print(f"  Vertrek {timestep_to_label(dep_time)} van {airports[origin]} naar {airports[dest]} met {passengers:.1f} passagiers")
+
+        prev_arr_ts = None 
+
+        for i in range(len(route) - 1):
+            dep_ts, origin = route[i]
+            arr_ts, dest   = route[i + 1]
+
+            passengers = flown[i] if i < len(flown) else 0
+
+            block_t = block_time(origin, dest, ac_type)
+
+            if (arr_ts - dep_ts) * 6 > block_t:
+                dep_ts = arr_ts - block_t / 6
+
+            if prev_arr_ts is not None and dep_ts != prev_arr_ts:
+                waiting_min = (dep_ts - prev_arr_ts) * 6
+                print(f"    Waiting time: {math.floor(waiting_min):.0f} min")
+
+            print(
+                f"  Departure {timestep_to_label(dep_ts)} from {airports[origin]} "
+                f"→ arrival {timestep_to_label(arr_ts)} at {airports[dest]} | "
+                f"Block time: {math.ceil(block_t):.0f} min | "
+                f"Passengers: {passengers:.0f}"
+            )
+
+            prev_arr_ts = arr_ts
+
 
 print_all_routes(solution_dict, airports, timestep_to_label)
 
-# Indexen ophalen van luchthavens EGLL en LFPG
-origin_idx = airports.index("EHAM")
-dest_idx = airports.index("EGLL")
 
-flight_count = 0
-total_passengers = 0
 
-for sched in solution_dict.values():
-    route = sched["Route"]
-    flows = sched.get("Flows", None)  # flows moet je in solution_dict opslaan
-    for i in range(len(route)-1):
-        dep_airport = route[i][1]
-        arr_airport = route[i+1][1]
-        if dep_airport == origin_idx and arr_airport == dest_idx:
-            flight_count += 1
-            if flows is not None and i < len(flows):
-                total_passengers += flows[i]
-
-print(f"Aantal vluchten EGLL -> LFPG: {flight_count}")
-print(f"Totaal vervoerde passagiers EHAM -> EGLL: {total_passengers:.1f}")
-
+print("\n=========KPI's flight schedule:=========")
 ASK = 0.0
 RPK = 0.0
 
@@ -474,62 +458,100 @@ print(f"RASK  : {RASK:.4f} €/ASK")
 print(f"YIELD : {YIELD:.4f} €/RPK")
 print(f"ANLF  : {ANLF:.3f}")
 print(f"BELF  : {BELF:.3f}")
-print(f"Totaal winst (Profit uit solution_dict): {sum(sched['Profit'] for sched in solution_dict.values()):.2f} €")
-print(f"Total revenue: {TOTAL_REVENUE:.2f}")
+
+print(f"\nTotal revenue: {TOTAL_REVENUE:.2f}")
 print(f"Total costs: {TOTAL_COST:.2f}")
-print(f"Totale profit {TOTAL_REVENUE-TOTAL_COST:.2f}")
+print(f"Total profit: {TOTAL_REVENUE-TOTAL_COST:.2f}")
 
-#MAKING A GRAPH VIA CHATGPT
-def add_ground_arcs(route):
-    full_route = []
+print("\n=== Number of flights between two airports ===")
+
+flight_counts = {}
+
+for sched in solution_dict.values():
+    route = sched["Route"]
+
     for i in range(len(route) - 1):
-        t0, a0 = route[i]
-        t1, a1 = route[i + 1]
+        origin = route[i][1]
+        dest   = route[i + 1][1]
 
-        full_route.append((t0, a0))
-        for t in range(t0 + 1, t1):
-            full_route.append((t, a0))
-    full_route.append(route[-1])
-    return full_route
+        key = (airports[origin], airports[dest])
+        flight_counts[key] = flight_counts.get(key, 0) + 1
 
-# def timestep_to_label(ts, timestep_duration=6):
-#     minutes = ts * timestep_duration
-#     h = minutes // 60
-#     m = minutes % 60
-#     return f"{int(h):02d}:{int(m):02d}"
+for (origin, dest), count in flight_counts.items():
+    print(f"{origin} → {dest}: {count} flights")
+
+print("\n=== Distances between key airports ===")
+print(f' Amsterdam - London {d[2,0]} km')
+print(f' Amsterdam - Paris {d[2,1]} km')
+print(f' Amsterdam - Munich {d[2,6]} km')
+print(f' Amsterdam - Berlin {d[2, 11]} km')
+print(f' Amsterdam - Frankfurt {d[2,3]} km')
+print(f' Amsterdam - Dublin {d[2, 8]} km')
+
+
+
+
+# ================ Visualization of Schedule ==================
+
 
 fig, ax = plt.subplots(figsize=(16, 6))
+
 ax.set_yticks(range(len(airports)))
 ax.set_yticklabels(airports)
 ax.set_ylim(-1, len(airports))
 
 timestep_duration = 6
-total_timesteps = 24*60 // timestep_duration
+total_timesteps = 24 * 60 // timestep_duration
 
-minor_ticks = range(0, total_timesteps + 1, 2*60 // timestep_duration)
 ax.set_xlim(0, total_timesteps)
-ax.set_xticks([])
-ax.set_xticks(minor_ticks, minor=True)
-ax.set_xticklabels([timestep_to_label(t) for t in minor_ticks], minor=True)
-ax.tick_params(axis='x', which='minor', labelsize=8, length=5)
+
+minor_ticks = range(0, total_timesteps + 1, 2 * 60 // timestep_duration)
+ax.set_xticks(minor_ticks)
+ax.set_xticklabels([timestep_to_label(t) for t in minor_ticks], rotation=45)
+ax.tick_params(axis='x', labelsize=8)
 
 colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'gray']
 
 for idx, (route_name, sched) in enumerate(solution_dict.items()):
     route = sched["Route"]
     ac_type = sched["Aircraft type"]
-    expanded_route = add_ground_arcs(route)
+    color = colors[idx % len(colors)]
 
-    times = [step[0] for step in expanded_route]
-    airport_ids = [step[1] for step in expanded_route]
-    ac_count_idx = idx 
-    color = colors[ac_count_idx % len(colors)]
-    ax.plot(times, airport_ids, color=color, label=f"{route_name} - AC type {ac_type}")
+    prev_arr_ts = None
+    prev_dest = None
+
+    for i in range(len(route) - 1):
+        dep_ts, origin = route[i]
+        arr_ts, dest   = route[i + 1]
+
+        block_t = block_time(origin, dest, ac_type)
+
+        if (arr_ts - dep_ts) * 6 > block_t:
+            dep_ts = arr_ts - block_t / 6
+
+        if prev_arr_ts is not None and dep_ts > prev_arr_ts:
+            ax.plot(
+                [prev_arr_ts, dep_ts],
+                [origin, origin],
+                color=color,
+                linewidth=2
+            )
+
+        ax.plot(
+            [dep_ts, arr_ts],
+            [origin, dest],
+            color=color,
+            linewidth=2,
+            label=f"{route_name} - AC type {ac_type}" if i == 0 else ""
+        )
+
+        prev_arr_ts = arr_ts
+        prev_dest = dest
 
 ax.set_xlabel("Time")
 ax.set_ylabel("Airports")
-ax.grid()
+ax.set_title("Aircraft Timetable (Linear Flight & Waiting Times)")
+ax.grid(True)
 ax.legend()
-plt.title("Aircraft Timetable")
 plt.tight_layout()
 plt.show()
